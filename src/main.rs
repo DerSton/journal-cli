@@ -13,7 +13,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use journal::Journal;
-use app::{App, AppMode};
+use app::{App, AppMode, Tab};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. CLI Argument Parsing
@@ -105,11 +105,26 @@ where
                 if key.kind == event::KeyEventKind::Press {
                     match app.mode {
                         AppMode::List => match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => {
+                            KeyCode::Char('q') => {
                                 app.should_quit = true;
                             }
+                            // Tab Selection
+                            KeyCode::Tab => {
+                                let next_tab = match app.active_tab {
+                                    Tab::Journal => Tab::Contacts,
+                                    Tab::Contacts => Tab::Journal,
+                                };
+                                app.switch_tab(next_tab);
+                            }
+                            KeyCode::Char('1') => {
+                                app.switch_tab(Tab::Journal);
+                            }
+                            KeyCode::Char('2') => {
+                                app.switch_tab(Tab::Contacts);
+                            }
+                            // Selection Navigation
                             KeyCode::Up | KeyCode::Char('k') => {
-                                if !app.journal.entries.is_empty() && app.selected_index > 0 {
+                                if app.selected_index > 0 {
                                     app.selected_index -= 1;
                                     app.detail_scroll = 0;
                                     app.status_msg = None;
@@ -117,7 +132,11 @@ where
                                 }
                             }
                             KeyCode::Down | KeyCode::Char('j') => {
-                                if !app.journal.entries.is_empty() && app.selected_index < app.journal.entries.len() - 1 {
+                                let len = match app.active_tab {
+                                    Tab::Journal => app.journal.entries.len(),
+                                    Tab::Contacts => app.journal.contacts.len(),
+                                };
+                                if len > 0 && app.selected_index < len - 1 {
                                     app.selected_index += 1;
                                     app.detail_scroll = 0;
                                     app.status_msg = None;
@@ -125,30 +144,66 @@ where
                                 }
                             }
                             KeyCode::PageUp => {
-                                app.detail_scroll = app.detail_scroll.saturating_sub(1);
-                            }
-                            KeyCode::PageDown => {
-                                app.detail_scroll = app.detail_scroll.saturating_add(1);
-                            }
-                            KeyCode::Char('n') => {
-                                app.textarea = ratatui_textarea::TextArea::default();
-                                app.mode = AppMode::Writing { is_edit: false };
-                                app.status_msg = None;
-                                app.error_msg = None;
-                            }
-                            KeyCode::Char('e') => {
-                                if !app.journal.entries.is_empty() {
-                                    let content = &app.journal.entries[app.selected_index].content;
-                                    app.textarea = ratatui_textarea::TextArea::new(
-                                        content.lines().map(String::from).collect()
-                                    );
-                                    app.mode = AppMode::Writing { is_edit: true };
-                                    app.status_msg = None;
-                                    app.error_msg = None;
+                                if app.active_tab == Tab::Journal {
+                                    app.detail_scroll = app.detail_scroll.saturating_sub(1);
                                 }
                             }
-                            KeyCode::Char('d') | KeyCode::Delete => {
-                                if !app.journal.entries.is_empty() {
+                            KeyCode::PageDown => {
+                                if app.active_tab == Tab::Journal {
+                                    app.detail_scroll = app.detail_scroll.saturating_add(1);
+                                }
+                            }
+                            // Item Operations
+                            KeyCode::Char('n') => {
+                                app.status_msg = None;
+                                app.error_msg = None;
+                                match app.active_tab {
+                                    Tab::Journal => {
+                                        app.textarea = ratatui_textarea::TextArea::default();
+                                        app.mode = AppMode::Writing { is_edit: false };
+                                    }
+                                    Tab::Contacts => {
+                                        app.contact_first_name = ratatui_textarea::TextArea::default();
+                                        app.contact_middle_name = ratatui_textarea::TextArea::default();
+                                        app.contact_last_name = ratatui_textarea::TextArea::default();
+                                        app.active_field_index = 0;
+                                        app.mode = AppMode::Writing { is_edit: false };
+                                    }
+                                }
+                            }
+                            KeyCode::Char('e') => {
+                                app.status_msg = None;
+                                app.error_msg = None;
+                                match app.active_tab {
+                                    Tab::Journal => {
+                                        if !app.journal.entries.is_empty() {
+                                            let content = &app.journal.entries[app.selected_index].content;
+                                            app.textarea = ratatui_textarea::TextArea::new(
+                                                content.lines().map(String::from).collect()
+                                            );
+                                            app.mode = AppMode::Writing { is_edit: true };
+                                        }
+                                    }
+                                    Tab::Contacts => {
+                                        if !app.journal.contacts.is_empty() {
+                                            let contact = &app.journal.contacts[app.selected_index];
+                                            app.contact_first_name = ratatui_textarea::TextArea::new(vec![contact.first_name.clone()]);
+                                            app.contact_middle_name = ratatui_textarea::TextArea::new(vec![contact.middle_name.clone()]);
+                                            app.contact_last_name = ratatui_textarea::TextArea::new(vec![contact.last_name.clone()]);
+                                            app.active_field_index = 0;
+                                            app.mode = AppMode::Writing { is_edit: true };
+                                        }
+                                    }
+                                }
+                            }
+                            KeyCode::Char('d') | KeyCode::Delete | KeyCode::Esc => {
+                                let is_empty = match app.active_tab {
+                                    Tab::Journal => app.journal.entries.is_empty(),
+                                    Tab::Contacts => app.journal.contacts.is_empty(),
+                                };
+                                if key.code == KeyCode::Esc {
+                                    app.should_quit = true;
+                                } else if !is_empty {
                                     app.mode = AppMode::DeleteConfirm;
                                     app.status_msg = None;
                                     app.error_msg = None;
@@ -157,17 +212,42 @@ where
                             _ => {}
                         },
                         AppMode::Writing { .. } => {
-                            if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                                app.handle_save_entry();
-                            } else if key.code == KeyCode::Esc {
-                                app.mode = AppMode::List;
-                            } else {
-                                app.textarea.input(key);
+                            match app.active_tab {
+                                Tab::Journal => {
+                                    if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                                        app.handle_save_entry();
+                                    } else if key.code == KeyCode::Esc {
+                                        app.mode = AppMode::List;
+                                    } else {
+                                        app.textarea.input(key);
+                                    }
+                                }
+                                Tab::Contacts => {
+                                    if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                                        app.handle_save_contact();
+                                    } else if key.code == KeyCode::Esc {
+                                        app.mode = AppMode::List;
+                                    } else if key.code == KeyCode::Tab || key.code == KeyCode::Down {
+                                        app.active_field_index = (app.active_field_index + 1) % 3;
+                                    } else if key.code == KeyCode::BackTab || key.code == KeyCode::Up {
+                                        app.active_field_index = if app.active_field_index == 0 { 2 } else { app.active_field_index - 1 };
+                                    } else {
+                                        match app.active_field_index {
+                                            0 => app.contact_first_name.input(key),
+                                            1 => app.contact_middle_name.input(key),
+                                            2 => app.contact_last_name.input(key),
+                                            _ => false,
+                                        };
+                                    }
+                                }
                             }
                         }
                         AppMode::DeleteConfirm => match key.code {
                             KeyCode::Char('y') | KeyCode::Char('Y') => {
-                                app.delete_selected_entry();
+                                match app.active_tab {
+                                    Tab::Journal => app.delete_selected_entry(),
+                                    Tab::Contacts => app.delete_selected_contact(),
+                                };
                             }
                             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
                                 app.mode = AppMode::List;

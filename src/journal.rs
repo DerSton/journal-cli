@@ -15,9 +15,19 @@ pub struct JournalEntry {
     pub content: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Contact {
+    pub id: String,
+    pub first_name: String,
+    pub middle_name: String,
+    pub last_name: String,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Journal {
     pub entries: Vec<JournalEntry>,
+    #[serde(default)]
+    pub contacts: Vec<Contact>,
 }
 
 impl Journal {
