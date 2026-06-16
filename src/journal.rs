@@ -21,7 +21,81 @@ pub struct Contact {
     pub first_name: String,
     pub middle_name: String,
     pub last_name: String,
+    #[serde(default)]
+    pub handle: String,
+    #[serde(default)]
+    pub notes: String,
 }
+
+impl Contact {
+    /// Returns the full name with a single space separating the non-empty fields.
+    pub fn full_name(&self) -> String {
+        let mut parts = Vec::new();
+        if !self.first_name.is_empty() {
+            parts.push(self.first_name.as_str());
+        }
+        if !self.middle_name.is_empty() {
+            parts.push(self.middle_name.as_str());
+        }
+        if !self.last_name.is_empty() {
+            parts.push(self.last_name.as_str());
+        }
+        parts.join(" ")
+    }
+
+    /// Returns the name formatted for list displays (e.g. "Doe, John Middle").
+    /// Avoids leading commas and double spaces when fields are missing.
+    pub fn display_name(&self) -> String {
+        let mut parts = Vec::new();
+        if !self.last_name.is_empty() {
+            let mut first_mid = Vec::new();
+            if !self.first_name.is_empty() {
+                first_mid.push(self.first_name.as_str());
+            }
+            if !self.middle_name.is_empty() {
+                first_mid.push(self.middle_name.as_str());
+            }
+            if first_mid.is_empty() {
+                parts.push(self.last_name.clone());
+            } else {
+                parts.push(format!("{}, {}", self.last_name, first_mid.join(" ")));
+            }
+        } else {
+            if !self.first_name.is_empty() {
+                parts.push(self.first_name.clone());
+            }
+            if !self.middle_name.is_empty() {
+                parts.push(self.middle_name.clone());
+            }
+        }
+        parts.join(" ")
+    }
+
+    /// Returns the initials of the contact, up to 2 characters, without using '?' unless completely empty.
+    pub fn initials(&self) -> String {
+        let mut initials = String::new();
+        if let Some(c) = self.first_name.chars().next() {
+            initials.push(c.to_uppercase().next().unwrap());
+        }
+        if let Some(c) = self.middle_name.chars().next() {
+            initials.push(c.to_uppercase().next().unwrap());
+        }
+        if let Some(c) = self.last_name.chars().next() {
+            initials.push(c.to_uppercase().next().unwrap());
+        }
+        
+        if initials.is_empty() {
+            "??".to_string()
+        } else if initials.len() > 2 {
+            let first_char = initials.chars().next().unwrap();
+            let last_char = initials.chars().nth(2).unwrap();
+            format!("{}{}", first_char, last_char)
+        } else {
+            initials
+        }
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Journal {

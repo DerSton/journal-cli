@@ -14,6 +14,7 @@ pub enum Tab {
 pub enum AppMode {
     List,
     Writing { is_edit: bool },
+    ContactPicker { is_edit: bool, selected_contact_index: usize },
     DeleteConfirm,
 }
 
@@ -40,7 +41,9 @@ pub struct App {
     pub contact_first_name: TextArea<'static>,
     pub contact_middle_name: TextArea<'static>,
     pub contact_last_name: TextArea<'static>,
-    /// Active field index in the contact editor (0: First, 1: Middle, 2: Last).
+    pub contact_handle: TextArea<'static>,
+    pub contact_notes: TextArea<'static>,
+    /// Active field index in the contact editor (0: First, 1: Middle, 2: Last, 3: Handle, 4: Notes).
     pub active_field_index: usize,
 
     /// Global error toast message.
@@ -51,6 +54,8 @@ pub struct App {
     pub should_quit: bool,
     /// Vertical scroll offset for the details pane.
     pub detail_scroll: u16,
+    /// Whether the contact handle was manually edited.
+    pub handle_edited: bool,
 }
 
 impl App {
@@ -68,11 +73,14 @@ impl App {
             contact_first_name: TextArea::default(),
             contact_middle_name: TextArea::default(),
             contact_last_name: TextArea::default(),
+            contact_handle: TextArea::default(),
+            contact_notes: TextArea::default(),
             active_field_index: 0,
             error_msg: None,
             status_msg: Some("Welcome to your secure journal CLI!".to_string()),
             should_quit: false,
             detail_scroll: 0,
+            handle_edited: false,
         };
         app.sort_entries();
         app.sort_contacts();
@@ -177,9 +185,37 @@ impl App {
         let first = self.contact_first_name.lines().join("").trim().to_string();
         let middle = self.contact_middle_name.lines().join("").trim().to_string();
         let last = self.contact_last_name.lines().join("").trim().to_string();
+        let mut handle = self.contact_handle.lines().join("").trim().to_string();
+        let notes = self.contact_notes.lines().join("\n").trim().to_string();
 
         if first.is_empty() && last.is_empty() {
             self.error_msg = Some("Error: First Name or Last Name must be provided".to_string());
+            return;
+        }
+
+        // Clean handle: remove starting '@' if present, make alphanumeric
+        if handle.starts_with('@') {
+            handle.remove(0);
+        }
+        let handle = handle.replace(' ', "");
+
+        if handle.is_empty() {
+            self.error_msg = Some("Error: Handle must not be empty".to_string());
+            return;
+        }
+
+        // Check handle uniqueness
+        let handle_lower = handle.to_lowercase();
+        let is_unique = !self.journal.contacts.iter().any(|c| {
+            let is_same_contact = match self.mode {
+                AppMode::Writing { is_edit: true } => c.id == self.journal.contacts[self.selected_index].id,
+                _ => false,
+            };
+            !is_same_contact && c.handle.to_lowercase() == handle_lower
+        });
+
+        if !is_unique {
+            self.error_msg = Some(format!("Error: Handle '@{}' is already taken", handle));
             return;
         }
 
@@ -190,6 +226,8 @@ impl App {
                     first_name: first,
                     middle_name: middle,
                     last_name: last,
+                    handle,
+                    notes,
                 };
                 self.journal.contacts.push(new_contact);
                 self.sort_contacts();
@@ -202,6 +240,8 @@ impl App {
                     contact.first_name = first;
                     contact.middle_name = middle;
                     contact.last_name = last;
+                    contact.handle = handle;
+                    contact.notes = notes;
                     self.sort_contacts();
                     self.status_msg = Some("Contact updated".to_string());
                 }
@@ -244,5 +284,18 @@ impl App {
 
         self.mode = AppMode::List;
         self.detail_scroll = 0;
+    }
+
+    /// Find all journal entries that contain a mention of the given handle.
+    pub fn get_mentions_for_contact(&self, handle: &str) -> Vec<&JournalEntry> {
+        if handle.is_empty() {
+            return Vec::new();
+        }
+        let target = format!("{{{{person|{}}}}}", handle.to_lowercase());
+        self.journal
+            .entries
+            .iter()
+            .filter(|entry| entry.content.to_lowercase().contains(&target))
+            .collect()
     }
 }

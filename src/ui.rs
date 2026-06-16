@@ -1,11 +1,69 @@
 use crate::app::{App, AppMode, Tab};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
     Frame,
 };
+
+/// Resolves `{{person|handle}}` tags in text lines, replacing them with highlighted contact full names.
+fn render_mentions<'a>(line: &'a str, contacts: &[crate::journal::Contact]) -> Line<'a> {
+    let mut spans = Vec::new();
+    let mut last_idx = 0;
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        // Check if substring starts with "{{person|"
+        if i + 9 <= chars.len() && chars[i..i+9] == ['{', '{', 'p', 'e', 'r', 's', 'o', 'n', '|'] {
+            let start_idx = i;
+            i += 9;
+            let mut handle = String::new();
+            let mut found_closing = false;
+            
+            while i < chars.len() {
+                if i + 2 <= chars.len() && chars[i..i+2] == ['}', '}'] {
+                    found_closing = true;
+                    i += 2;
+                    break;
+                } else {
+                    handle.push(chars[i]);
+                    i += 1;
+                }
+            }
+
+            if found_closing && !handle.is_empty() {
+                // Find matching contact by handle (case-insensitive)
+                let found_contact = contacts.iter().find(|c| c.handle.to_lowercase() == handle.to_lowercase());
+                if let Some(contact) = found_contact {
+                    // Push plain text prior to the handle
+                    if start_idx > last_idx {
+                        let text: String = chars[last_idx..start_idx].iter().collect();
+                        spans.push(Span::styled(text, Style::default().fg(Color::White)));
+                    }
+                    // Push styled contact full name
+                    let full_name = contact.full_name();
+                    spans.push(Span::styled(
+                        full_name,
+                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD).add_modifier(Modifier::UNDERLINED),
+                    ));
+                    last_idx = i;
+                }
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    // Push remaining text on line
+    if last_idx < chars.len() {
+        let text: String = chars[last_idx..].iter().collect();
+        spans.push(Span::styled(text, Style::default().fg(Color::White)));
+    }
+
+    Line::from(spans)
+}
 
 /// Main UI rendering entry point.
 pub fn draw(f: &mut Frame, app: &mut App) {
@@ -181,12 +239,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                                 Span::styled("Date: ", Style::default().fg(Color::Cyan)),
                                 Span::styled(time_str, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
                             ]),
-                            Line::from(Span::styled("━".repeat(content_area.width as usize - 4), Style::default().fg(Color::DarkGray))),
+                            Line::from(Span::styled("━".repeat((content_area.width as usize).saturating_sub(4)), Style::default().fg(Color::DarkGray))),
                             Line::from(""),
                         ];
 
+                        // Render lines resolving mentions to full contact names
                         for line in entry.content.lines() {
-                            text_lines.push(Line::from(Span::styled(line, Style::default().fg(Color::White))));
+                            text_lines.push(render_mentions(line, &app.journal.contacts));
                         }
 
                         let total_text_lines = text_lines.len();
@@ -226,9 +285,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 .enumerate()
                 .map(|(i, contact)| {
                     let is_selected = i == app.selected_index;
-                    let display_name = format!("{}, {} {}", contact.last_name, contact.first_name, contact.middle_name)
-                        .trim()
-                        .to_string();
+                    let display_name = contact.display_name();
 
                     let title_style = if is_selected {
                         Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
@@ -272,7 +329,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
             f.render_stateful_widget(contact_list, list_area, &mut list_state);
 
-            // --- DRAW CONTACT DETAILS PREVIEW OR MULTI-FIELD WRITER ---
+            // --- DRAW CONTACT DETAILS PREVIEW OR 5-FIELD WRITER ---
             match app.mode {
                 AppMode::Writing { is_edit } => {
                     let form_title = if is_edit { " ✏️  Edit Contact " } else { " ➕  New Contact " };
@@ -292,6 +349,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             Constraint::Length(3), // First Name
                             Constraint::Length(3), // Middle Name
                             Constraint::Length(3), // Last Name
+                            Constraint::Length(3), // Handle
+                            Constraint::Length(5), // Notes
                             Constraint::Min(0),    // Hints / Navigation instructions
                         ])
                         .split(inner_area);
@@ -324,9 +383,26 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     app.contact_last_name.set_cursor_line_style(Style::default());
                     f.render_widget(&app.contact_last_name, form_chunks[2]);
 
+                    let block_handle = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(if app.active_field_index == 3 { Color::Cyan } else { Color::DarkGray }))
+                        .title(" Handle (for @mentions) ");
+                    app.contact_handle.set_block(block_handle);
+                    app.contact_handle.set_cursor_line_style(Style::default());
+                    f.render_widget(&app.contact_handle, form_chunks[3]);
+
+                    let block_notes = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(if app.active_field_index == 4 { Color::Cyan } else { Color::DarkGray }))
+                        .title(" Notes ");
+                    app.contact_notes.set_block(block_notes);
+                    app.contact_notes.set_cursor_line_style(Style::default().bg(Color::Indexed(235)));
+                    f.render_widget(&app.contact_notes, form_chunks[4]);
+
                     // Render hints & helpers
                     let hints = vec![
-                        Line::from(""),
                         Line::from("Form Controls:").alignment(ratatui::layout::Alignment::Center),
                         Line::from(vec![
                             Span::styled(" Tab / Down arrow ", Style::default().fg(Color::Cyan)),
@@ -334,7 +410,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             Span::styled(" Shift+Tab / Up arrow ", Style::default().fg(Color::Cyan)),
                             Span::raw("Prev Field"),
                         ]).alignment(ratatui::layout::Alignment::Center),
-                        Line::from(""),
                         Line::from(vec![
                             Span::styled(" Ctrl + S ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
                             Span::raw("Save Contact   "),
@@ -342,7 +417,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             Span::raw("Cancel"),
                         ]).alignment(ratatui::layout::Alignment::Center),
                     ];
-                    f.render_widget(Paragraph::new(hints), form_chunks[3]);
+                    f.render_widget(Paragraph::new(hints), form_chunks[5]);
                 }
                 _ => {
                     if app.journal.contacts.is_empty() {
@@ -361,46 +436,102 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         f.render_widget(paragraph, content_area);
                     } else {
                         let contact = &app.journal.contacts[app.selected_index];
-                        let first_initial = contact.first_name.chars().next().unwrap_or('?').to_uppercase().to_string();
-                        let last_initial = contact.last_name.chars().next().unwrap_or('?').to_uppercase().to_string();
-                        let initials = format!(" {}{} ", first_initial, last_initial);
+                        let initials = format!(" {} ", contact.initials());
 
+                        let splits = Layout::default()
+                            .direction(Direction::Vertical)
+                            .constraints([
+                                Constraint::Percentage(60), // Contact Info & Notes
+                                Constraint::Percentage(40), // Mention History List
+                            ])
+                            .split(content_area);
+
+                        // 1. Draw Profile & Notes Card
                         let detail_block = Block::default()
                             .borders(Borders::ALL)
                             .border_type(BorderType::Rounded)
                             .border_style(Style::default().fg(Color::DarkGray))
-                            .title(Span::styled(" Contact Details ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
+                            .title(Span::styled(" Contact Profile ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
 
-                        let text = vec![
+                        let mut profile_text = vec![
                             Line::from(""),
                             Line::from(vec![
                                 Span::styled("  [", Style::default().fg(Color::DarkGray)),
                                 Span::styled(initials, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
                                 Span::styled("]  ", Style::default().fg(Color::DarkGray)),
                                 Span::styled(
-                                    format!("{} {} {}", contact.first_name, contact.middle_name, contact.last_name).trim().to_string(),
+                                    contact.full_name(),
                                     Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
                                 ),
                             ]),
-                            Line::from(""),
-                            Line::from(Span::styled("  ━".repeat(content_area.width as usize - 6), Style::default().fg(Color::DarkGray))),
-                            Line::from(""),
+                            Line::from(Span::styled(format!("  {}", "━".repeat((splits[0].width as usize).saturating_sub(6))), Style::default().fg(Color::DarkGray))),
                             Line::from(vec![
                                 Span::styled("  First Name:  ", Style::default().fg(Color::Cyan)),
                                 Span::styled(&contact.first_name, Style::default().fg(Color::White)),
                             ]),
-                            Line::from(""),
                             Line::from(vec![
                                 Span::styled("  Middle Name: ", Style::default().fg(Color::Cyan)),
                                 Span::styled(if contact.middle_name.is_empty() { "-" } else { &contact.middle_name }, Style::default().fg(Color::White)),
                             ]),
-                            Line::from(""),
                             Line::from(vec![
                                 Span::styled("  Last Name:   ", Style::default().fg(Color::Cyan)),
                                 Span::styled(&contact.last_name, Style::default().fg(Color::White)),
                             ]),
+                            Line::from(vec![
+                                Span::styled("  Handle:      ", Style::default().fg(Color::Cyan)),
+                                Span::styled(format!("@{}", contact.handle), Style::default().fg(Color::White)),
+                            ]),
+                            Line::from(""),
+                            Line::from(Span::styled("  Notes:", Style::default().fg(Color::Cyan))),
                         ];
-                        f.render_widget(Paragraph::new(text).block(detail_block), content_area);
+
+                        if contact.notes.is_empty() {
+                            profile_text.push(Line::from(Span::styled("  -", Style::default().fg(Color::DarkGray))));
+                        } else {
+                            for note_line in contact.notes.lines() {
+                                profile_text.push(Line::from(Span::styled(format!("  {}", note_line), Style::default().fg(Color::White))));
+                            }
+                        }
+
+                        f.render_widget(Paragraph::new(profile_text).block(detail_block).wrap(ratatui::widgets::Wrap { trim: false }), splits[0]);
+
+                        // 2. Draw Mention History List
+                        let mentions = app.get_mentions_for_contact(&contact.handle);
+                        let mentions_block = Block::default()
+                            .borders(Borders::ALL)
+                            .border_type(BorderType::Rounded)
+                            .border_style(Style::default().fg(Color::DarkGray))
+                            .title(Span::styled(" Mentions in Journal ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
+
+                        if mentions.is_empty() {
+                            let no_mentions = vec![
+                                Line::from(""),
+                                Line::from(format!("No mentions of @{} found in your journal.", contact.handle)).alignment(ratatui::layout::Alignment::Center).fg(Color::DarkGray),
+                            ];
+                            f.render_widget(Paragraph::new(no_mentions).block(mentions_block), splits[1]);
+                        } else {
+                            let mut mention_items = Vec::new();
+                            for entry in mentions {
+                                let local_time = entry.timestamp.with_timezone(&chrono::Local);
+                                let date_str = local_time.format("%Y-%m-%d").to_string();
+                                
+                                let snippet = entry.content.lines().next().unwrap_or("").trim();
+                                let snippet_truncated = if snippet.chars().count() > 45 {
+                                    let s: String = snippet.chars().take(42).collect();
+                                    format!("{}...", s)
+                                } else {
+                                    snippet.to_string()
+                                };
+                                
+                                mention_items.push(ListItem::new(vec![
+                                    Line::from(vec![
+                                        Span::styled(format!(" • {}: ", date_str), Style::default().fg(Color::Cyan)),
+                                        Span::styled(snippet_truncated, Style::default().fg(Color::White)),
+                                    ]),
+                                ]));
+                            }
+                            f.render_widget(List::new(mention_items).block(mentions_block), splits[1]);
+                        }
                     }
                 }
             }
@@ -452,6 +583,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         }
         AppMode::Writing { .. } => match app.active_tab {
             Tab::Journal => vec![
+                Span::styled(" Alt+P: ", Style::default().fg(Color::Cyan)),
+                Span::styled("Mention Contact ", Style::default().fg(Color::White)),
                 Span::styled(" Ctrl+S: ", Style::default().fg(Color::Cyan)),
                 Span::styled("Save Entry ", Style::default().fg(Color::White)),
                 Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
@@ -468,6 +601,14 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 Span::styled("Cancel ", Style::default().fg(Color::White)),
             ],
         },
+        AppMode::ContactPicker { .. } => vec![
+            Span::styled(" Up/Down / j/k: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Select Contact ", Style::default().fg(Color::White)),
+            Span::styled(" Enter: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Mention ", Style::default().fg(Color::White)),
+            Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Cancel ", Style::default().fg(Color::White)),
+        ],
         AppMode::DeleteConfirm => vec![
             Span::styled(" Confirm Delete? ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
             Span::styled(" y: ", Style::default().fg(Color::Cyan)),
@@ -519,6 +660,49 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             .wrap(ratatui::widgets::Wrap { trim: true });
 
         f.render_widget(confirm_para, modal_area);
+    }
+
+    // --- DRAW OVERLAY FOR CONTACT PICKER MENTIONS DIALOG ---
+    if let AppMode::ContactPicker { selected_contact_index, .. } = app.mode {
+        let modal_area = centered_rect(60, 50, f.area());
+        f.render_widget(Clear, modal_area);
+
+        let picker_block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Double)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(Span::styled(" Select Contact to Mention [Enter: Pick, Esc: Cancel] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
+
+        let items: Vec<ListItem> = app
+            .journal
+            .contacts
+            .iter()
+            .enumerate()
+            .map(|(i, contact)| {
+                let is_selected = i == selected_contact_index;
+                let display = format!("{} (@{})", contact.full_name(), contact.handle);
+                let style = if is_selected {
+                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                ListItem::new(Line::from(vec![
+                    Span::raw(if is_selected { "➔  " } else { "   " }),
+                    Span::styled(display, style),
+                ]))
+            })
+            .collect();
+
+        let mut list_state = ratatui::widgets::ListState::default();
+        if !app.journal.contacts.is_empty() {
+            list_state.select(Some(selected_contact_index));
+        }
+
+        let list_widget = List::new(items)
+            .block(picker_block)
+            .highlight_style(Style::default().bg(Color::Indexed(236)));
+
+        f.render_stateful_widget(list_widget, modal_area, &mut list_state);
     }
 }
 

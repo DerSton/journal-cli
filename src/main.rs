@@ -166,7 +166,10 @@ where
                                         app.contact_first_name = ratatui_textarea::TextArea::default();
                                         app.contact_middle_name = ratatui_textarea::TextArea::default();
                                         app.contact_last_name = ratatui_textarea::TextArea::default();
+                                        app.contact_handle = ratatui_textarea::TextArea::default();
+                                        app.contact_notes = ratatui_textarea::TextArea::default();
                                         app.active_field_index = 0;
+                                        app.handle_edited = false;
                                         app.mode = AppMode::Writing { is_edit: false };
                                     }
                                 }
@@ -190,7 +193,12 @@ where
                                             app.contact_first_name = ratatui_textarea::TextArea::new(vec![contact.first_name.clone()]);
                                             app.contact_middle_name = ratatui_textarea::TextArea::new(vec![contact.middle_name.clone()]);
                                             app.contact_last_name = ratatui_textarea::TextArea::new(vec![contact.last_name.clone()]);
+                                            app.contact_handle = ratatui_textarea::TextArea::new(vec![contact.handle.clone()]);
+                                            app.contact_notes = ratatui_textarea::TextArea::new(
+                                                contact.notes.lines().map(String::from).collect()
+                                            );
                                             app.active_field_index = 0;
+                                            app.handle_edited = true;
                                             app.mode = AppMode::Writing { is_edit: true };
                                         }
                                     }
@@ -211,10 +219,14 @@ where
                             }
                             _ => {}
                         },
-                        AppMode::Writing { .. } => {
+                        AppMode::Writing { is_edit } => {
                             match app.active_tab {
                                 Tab::Journal => {
-                                    if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                                    if key.code == KeyCode::Char('p') && key.modifiers.contains(KeyModifiers::ALT) {
+                                        if !app.journal.contacts.is_empty() {
+                                            app.mode = AppMode::ContactPicker { is_edit, selected_contact_index: 0 };
+                                        }
+                                    } else if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
                                         app.handle_save_entry();
                                     } else if key.code == KeyCode::Esc {
                                         app.mode = AppMode::List;
@@ -228,19 +240,60 @@ where
                                     } else if key.code == KeyCode::Esc {
                                         app.mode = AppMode::List;
                                     } else if key.code == KeyCode::Tab || key.code == KeyCode::Down {
-                                        app.active_field_index = (app.active_field_index + 1) % 3;
+                                        app.active_field_index = (app.active_field_index + 1) % 5;
                                     } else if key.code == KeyCode::BackTab || key.code == KeyCode::Up {
-                                        app.active_field_index = if app.active_field_index == 0 { 2 } else { app.active_field_index - 1 };
+                                        app.active_field_index = if app.active_field_index == 0 { 4 } else { app.active_field_index - 1 };
                                     } else {
+                                        let mut input_made = false;
                                         match app.active_field_index {
-                                            0 => app.contact_first_name.input(key),
-                                            1 => app.contact_middle_name.input(key),
-                                            2 => app.contact_last_name.input(key),
-                                            _ => false,
+                                            0 => { app.contact_first_name.input(key); input_made = true; }
+                                            1 => { app.contact_middle_name.input(key); }
+                                            2 => { app.contact_last_name.input(key); input_made = true; }
+                                            3 => { app.contact_handle.input(key); app.handle_edited = true; }
+                                            4 => { app.contact_notes.input(key); }
+                                            _ => {}
                                         };
+
+                                        // Auto-generate handle from first + last name unless manually customized
+                                        if input_made && !app.handle_edited {
+                                            if let AppMode::Writing { is_edit: false } = app.mode {
+                                                let first = app.contact_first_name.lines().join("").trim().to_lowercase().replace(' ', "");
+                                                let last = app.contact_last_name.lines().join("").trim().to_lowercase().replace(' ', "");
+                                                let auto_handle = format!("{}{}", first, last);
+                                                app.contact_handle = ratatui_textarea::TextArea::new(vec![auto_handle]);
+                                            }
+                                        }
                                     }
                                 }
                             }
+                        }
+                        AppMode::ContactPicker { is_edit, selected_contact_index } => match key.code {
+                            KeyCode::Esc => {
+                                app.mode = AppMode::Writing { is_edit };
+                            }
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                let len = app.journal.contacts.len();
+                                if len > 0 {
+                                    let next_idx = if selected_contact_index > 0 { selected_contact_index - 1 } else { len - 1 };
+                                    app.mode = AppMode::ContactPicker { is_edit, selected_contact_index: next_idx };
+                                }
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                let len = app.journal.contacts.len();
+                                if len > 0 {
+                                    let next_idx = (selected_contact_index + 1) % len;
+                                    app.mode = AppMode::ContactPicker { is_edit, selected_contact_index: next_idx };
+                                }
+                            }
+                            KeyCode::Enter => {
+                                let len = app.journal.contacts.len();
+                                if len > 0 && selected_contact_index < len {
+                                    let handle = &app.journal.contacts[selected_contact_index].handle;
+                                    app.textarea.insert_str(&format!("{{{{person|{}}}}}", handle));
+                                }
+                                app.mode = AppMode::Writing { is_edit };
+                            }
+                            _ => {}
                         }
                         AppMode::DeleteConfirm => match key.code {
                             KeyCode::Char('y') | KeyCode::Char('Y') => {
