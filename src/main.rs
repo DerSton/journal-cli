@@ -1,19 +1,19 @@
+mod app;
 mod crypto;
 mod journal;
-mod app;
 mod ui;
 
-use std::env;
-use std::io;
-use std::path::Path;
+use app::{App, AppMode, Tab};
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
 use journal::Journal;
-use app::{App, AppMode, Tab};
+use ratatui::{Terminal, backend::CrosstermBackend};
+use std::env;
+use std::io;
+use std::path::Path;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. CLI Argument Parsing
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (journal, salt, password) = if journal_path.exists() {
         println!("Opening existing journal: {}", journal_path_str);
         let password = rpassword::prompt_password("Enter Master Password: ")?;
-        
+
         match Journal::load(journal_path, &password) {
             Ok((j, s)) => (j, s, password),
             Err(e) => {
@@ -38,8 +38,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     } else {
-        println!("No journal file found at '{}'. Initializing a new secure journal.", journal_path_str);
-        
+        println!(
+            "No journal file found at '{}'. Initializing a new secure journal.",
+            journal_path_str
+        );
+
         let password = loop {
             let p1 = rpassword::prompt_password("Set Master Password: ")?;
             let p2 = rpassword::prompt_password("Confirm Master Password: ")?;
@@ -163,9 +166,12 @@ where
                                         app.mode = AppMode::Writing { is_edit: false };
                                     }
                                     Tab::Contacts => {
-                                        app.contact_first_name = ratatui_textarea::TextArea::default();
-                                        app.contact_middle_name = ratatui_textarea::TextArea::default();
-                                        app.contact_last_name = ratatui_textarea::TextArea::default();
+                                        app.contact_first_name =
+                                            ratatui_textarea::TextArea::default();
+                                        app.contact_middle_name =
+                                            ratatui_textarea::TextArea::default();
+                                        app.contact_last_name =
+                                            ratatui_textarea::TextArea::default();
                                         app.contact_handle = ratatui_textarea::TextArea::default();
                                         app.contact_notes = ratatui_textarea::TextArea::default();
                                         app.active_field_index = 0;
@@ -180,9 +186,10 @@ where
                                 match app.active_tab {
                                     Tab::Journal => {
                                         if !app.journal.entries.is_empty() {
-                                            let content = &app.journal.entries[app.selected_index].content;
+                                            let content =
+                                                &app.journal.entries[app.selected_index].content;
                                             app.textarea = ratatui_textarea::TextArea::new(
-                                                content.lines().map(String::from).collect()
+                                                content.lines().map(String::from).collect(),
                                             );
                                             app.mode = AppMode::Writing { is_edit: true };
                                         }
@@ -190,12 +197,24 @@ where
                                     Tab::Contacts => {
                                         if !app.journal.contacts.is_empty() {
                                             let contact = &app.journal.contacts[app.selected_index];
-                                            app.contact_first_name = ratatui_textarea::TextArea::new(vec![contact.first_name.clone()]);
-                                            app.contact_middle_name = ratatui_textarea::TextArea::new(vec![contact.middle_name.clone()]);
-                                            app.contact_last_name = ratatui_textarea::TextArea::new(vec![contact.last_name.clone()]);
-                                            app.contact_handle = ratatui_textarea::TextArea::new(vec![contact.handle.clone()]);
+                                            app.contact_first_name =
+                                                ratatui_textarea::TextArea::new(vec![
+                                                    contact.first_name.clone(),
+                                                ]);
+                                            app.contact_middle_name =
+                                                ratatui_textarea::TextArea::new(vec![
+                                                    contact.middle_name.clone(),
+                                                ]);
+                                            app.contact_last_name =
+                                                ratatui_textarea::TextArea::new(vec![
+                                                    contact.last_name.clone(),
+                                                ]);
+                                            app.contact_handle =
+                                                ratatui_textarea::TextArea::new(vec![
+                                                    contact.handle.clone(),
+                                                ]);
                                             app.contact_notes = ratatui_textarea::TextArea::new(
-                                                contact.notes.lines().map(String::from).collect()
+                                                contact.notes.lines().map(String::from).collect(),
                                             );
                                             app.active_field_index = 0;
                                             app.handle_edited = true;
@@ -222,11 +241,18 @@ where
                         AppMode::Writing { is_edit } => {
                             match app.active_tab {
                                 Tab::Journal => {
-                                    if key.code == KeyCode::Char('p') && key.modifiers.contains(KeyModifiers::ALT) {
+                                    if key.code == KeyCode::Char('p')
+                                        && key.modifiers.contains(KeyModifiers::ALT)
+                                    {
                                         if !app.journal.contacts.is_empty() {
-                                            app.mode = AppMode::ContactPicker { is_edit, selected_contact_index: 0 };
+                                            app.mode = AppMode::ContactPicker {
+                                                is_edit,
+                                                selected_contact_index: 0,
+                                            };
                                         }
-                                    } else if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                                    } else if key.code == KeyCode::Char('s')
+                                        && key.modifiers.contains(KeyModifiers::CONTROL)
+                                    {
                                         app.handle_save_entry();
                                     } else if key.code == KeyCode::Esc {
                                         app.mode = AppMode::List;
@@ -235,66 +261,118 @@ where
                                     }
                                 }
                                 Tab::Contacts => {
-                                    if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                                    if key.code == KeyCode::Char('s')
+                                        && key.modifiers.contains(KeyModifiers::CONTROL)
+                                    {
                                         app.handle_save_contact();
                                     } else if key.code == KeyCode::Esc {
                                         app.mode = AppMode::List;
-                                    } else if key.code == KeyCode::Tab || key.code == KeyCode::Down {
+                                    } else if key.code == KeyCode::Tab || key.code == KeyCode::Down
+                                    {
                                         app.active_field_index = (app.active_field_index + 1) % 5;
-                                    } else if key.code == KeyCode::BackTab || key.code == KeyCode::Up {
-                                        app.active_field_index = if app.active_field_index == 0 { 4 } else { app.active_field_index - 1 };
+                                    } else if key.code == KeyCode::BackTab
+                                        || key.code == KeyCode::Up
+                                    {
+                                        app.active_field_index = if app.active_field_index == 0 {
+                                            4
+                                        } else {
+                                            app.active_field_index - 1
+                                        };
                                     } else {
                                         let mut input_made = false;
                                         match app.active_field_index {
-                                            0 => { app.contact_first_name.input(key); input_made = true; }
-                                            1 => { app.contact_middle_name.input(key); }
-                                            2 => { app.contact_last_name.input(key); input_made = true; }
-                                            3 => { app.contact_handle.input(key); app.handle_edited = true; }
-                                            4 => { app.contact_notes.input(key); }
+                                            0 => {
+                                                app.contact_first_name.input(key);
+                                                input_made = true;
+                                            }
+                                            1 => {
+                                                app.contact_middle_name.input(key);
+                                            }
+                                            2 => {
+                                                app.contact_last_name.input(key);
+                                                input_made = true;
+                                            }
+                                            3 => {
+                                                app.contact_handle.input(key);
+                                                app.handle_edited = true;
+                                            }
+                                            4 => {
+                                                app.contact_notes.input(key);
+                                            }
                                             _ => {}
                                         };
 
                                         // Auto-generate handle from first + last name unless manually customized
                                         if input_made && !app.handle_edited {
                                             if let AppMode::Writing { is_edit: false } = app.mode {
-                                                let first = app.contact_first_name.lines().join("").trim().to_lowercase().replace(' ', "");
-                                                let last = app.contact_last_name.lines().join("").trim().to_lowercase().replace(' ', "");
+                                                let first = app
+                                                    .contact_first_name
+                                                    .lines()
+                                                    .join("")
+                                                    .trim()
+                                                    .to_lowercase()
+                                                    .replace(' ', "");
+                                                let last = app
+                                                    .contact_last_name
+                                                    .lines()
+                                                    .join("")
+                                                    .trim()
+                                                    .to_lowercase()
+                                                    .replace(' ', "");
                                                 let auto_handle = format!("{}{}", first, last);
-                                                app.contact_handle = ratatui_textarea::TextArea::new(vec![auto_handle]);
+                                                app.contact_handle =
+                                                    ratatui_textarea::TextArea::new(vec![
+                                                        auto_handle,
+                                                    ]);
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                        AppMode::ContactPicker { is_edit, selected_contact_index } => match key.code {
+                        AppMode::ContactPicker {
+                            is_edit,
+                            selected_contact_index,
+                        } => match key.code {
                             KeyCode::Esc => {
                                 app.mode = AppMode::Writing { is_edit };
                             }
                             KeyCode::Up | KeyCode::Char('k') => {
                                 let len = app.journal.contacts.len();
                                 if len > 0 {
-                                    let next_idx = if selected_contact_index > 0 { selected_contact_index - 1 } else { len - 1 };
-                                    app.mode = AppMode::ContactPicker { is_edit, selected_contact_index: next_idx };
+                                    let next_idx = if selected_contact_index > 0 {
+                                        selected_contact_index - 1
+                                    } else {
+                                        len - 1
+                                    };
+                                    app.mode = AppMode::ContactPicker {
+                                        is_edit,
+                                        selected_contact_index: next_idx,
+                                    };
                                 }
                             }
                             KeyCode::Down | KeyCode::Char('j') => {
                                 let len = app.journal.contacts.len();
                                 if len > 0 {
                                     let next_idx = (selected_contact_index + 1) % len;
-                                    app.mode = AppMode::ContactPicker { is_edit, selected_contact_index: next_idx };
+                                    app.mode = AppMode::ContactPicker {
+                                        is_edit,
+                                        selected_contact_index: next_idx,
+                                    };
                                 }
                             }
                             KeyCode::Enter => {
                                 let len = app.journal.contacts.len();
                                 if len > 0 && selected_contact_index < len {
-                                    let handle = &app.journal.contacts[selected_contact_index].handle;
-                                    app.textarea.insert_str(&format!("{{{{person|{}}}}}", handle));
+                                    let handle =
+                                        &app.journal.contacts[selected_contact_index].handle;
+                                    app.textarea
+                                        .insert_str(&format!("{{{{person|{}}}}}", handle));
                                 }
                                 app.mode = AppMode::Writing { is_edit };
                             }
                             _ => {}
-                        }
+                        },
                         AppMode::DeleteConfirm => match key.code {
                             KeyCode::Char('y') | KeyCode::Char('Y') => {
                                 match app.active_tab {
@@ -306,7 +384,7 @@ where
                                 app.mode = AppMode::List;
                             }
                             _ => {}
-                        }
+                        },
                     }
                 }
             }

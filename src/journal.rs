@@ -1,10 +1,10 @@
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::Path;
+use crate::crypto::{self, NONCE_SIZE, SALT_SIZE};
 use chrono::{DateTime, Utc};
 use rand::random;
 use serde::{Deserialize, Serialize};
-use crate::crypto::{self, NONCE_SIZE, SALT_SIZE};
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
 
 const MAGIC_BYTES: &[u8; 4] = b"JRNL";
 
@@ -83,7 +83,7 @@ impl Contact {
         if let Some(c) = self.last_name.chars().next() {
             initials.push(c.to_uppercase().next().unwrap());
         }
-        
+
         if initials.is_empty() {
             "??".to_string()
         } else if initials.len() > 2 {
@@ -96,7 +96,6 @@ impl Contact {
     }
 }
 
-
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Journal {
     pub entries: Vec<JournalEntry>,
@@ -108,10 +107,14 @@ impl Journal {
     /// Load and decrypt a journal file using the provided password.
     ///
     /// Returns the decrypted Journal struct and the file's salt.
-    pub fn load<P: AsRef<Path>>(path: P, password: &str) -> Result<(Self, [u8; SALT_SIZE]), String> {
+    pub fn load<P: AsRef<Path>>(
+        path: P,
+        password: &str,
+    ) -> Result<(Self, [u8; SALT_SIZE]), String> {
         let mut file = File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
         let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer).map_err(|e| format!("Failed to read file: {}", e))?;
+        file.read_to_end(&mut buffer)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
 
         if buffer.len() < 4 + SALT_SIZE + NONCE_SIZE {
             return Err("File is too short or corrupted".to_string());
@@ -141,21 +144,30 @@ impl Journal {
     /// Encrypt and save the journal file using the provided password and salt.
     ///
     /// Always generates a fresh nonce for encryption.
-    pub fn save<P: AsRef<Path>>(&self, path: P, password: &str, salt: &[u8; SALT_SIZE]) -> Result<(), String> {
+    pub fn save<P: AsRef<Path>>(
+        &self,
+        path: P,
+        password: &str,
+        salt: &[u8; SALT_SIZE],
+    ) -> Result<(), String> {
         let key = crypto::derive_key(password, salt)?;
 
-        let plaintext = serde_json::to_vec(self)
-            .map_err(|e| format!("Failed to serialize journal: {}", e))?;
+        let plaintext =
+            serde_json::to_vec(self).map_err(|e| format!("Failed to serialize journal: {}", e))?;
 
         let nonce: [u8; NONCE_SIZE] = random();
 
         let ciphertext = crypto::encrypt(&key, &nonce, &plaintext)?;
 
         let mut file = File::create(path).map_err(|e| format!("Failed to create file: {}", e))?;
-        file.write_all(MAGIC_BYTES).map_err(|e| format!("Failed to write magic bytes: {}", e))?;
-        file.write_all(salt).map_err(|e| format!("Failed to write salt: {}", e))?;
-        file.write_all(&nonce).map_err(|e| format!("Failed to write nonce: {}", e))?;
-        file.write_all(&ciphertext).map_err(|e| format!("Failed to write ciphertext: {}", e))?;
+        file.write_all(MAGIC_BYTES)
+            .map_err(|e| format!("Failed to write magic bytes: {}", e))?;
+        file.write_all(salt)
+            .map_err(|e| format!("Failed to write salt: {}", e))?;
+        file.write_all(&nonce)
+            .map_err(|e| format!("Failed to write nonce: {}", e))?;
+        file.write_all(&ciphertext)
+            .map_err(|e| format!("Failed to write ciphertext: {}", e))?;
 
         Ok(())
     }
@@ -163,7 +175,10 @@ impl Journal {
     /// Create, encrypt, and save a new empty journal file.
     ///
     /// Generates a fresh random salt.
-    pub fn create_new<P: AsRef<Path>>(path: P, password: &str) -> Result<(Self, [u8; SALT_SIZE]), String> {
+    pub fn create_new<P: AsRef<Path>>(
+        path: P,
+        password: &str,
+    ) -> Result<(Self, [u8; SALT_SIZE]), String> {
         let salt: [u8; SALT_SIZE] = random();
 
         let journal = Journal::default();

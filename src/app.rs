@@ -1,5 +1,5 @@
-use crate::journal::{Journal, JournalEntry, Contact};
 use crate::crypto::SALT_SIZE;
+use crate::journal::{Contact, Journal, JournalEntry};
 use chrono::Utc;
 use ratatui_textarea::TextArea;
 use uuid::Uuid;
@@ -13,8 +13,13 @@ pub enum Tab {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
     List,
-    Writing { is_edit: bool },
-    ContactPicker { is_edit: bool, selected_contact_index: usize },
+    Writing {
+        is_edit: bool,
+    },
+    ContactPicker {
+        is_edit: bool,
+        selected_contact_index: usize,
+    },
     DeleteConfirm,
 }
 
@@ -36,7 +41,7 @@ pub struct App {
     pub mode: AppMode,
     /// Text editing component for journal entries.
     pub textarea: TextArea<'static>,
-    
+
     // Contact Form Fields
     pub contact_first_name: TextArea<'static>,
     pub contact_middle_name: TextArea<'static>,
@@ -60,7 +65,12 @@ pub struct App {
 
 impl App {
     /// Create a new application instance, sorting entries and contacts.
-    pub fn new(journal: Journal, file_path: String, password: String, salt: [u8; SALT_SIZE]) -> Self {
+    pub fn new(
+        journal: Journal,
+        file_path: String,
+        password: String,
+        salt: [u8; SALT_SIZE],
+    ) -> Self {
         let mut app = Self {
             journal,
             file_path,
@@ -89,7 +99,9 @@ impl App {
 
     /// Sort entries in-place: newest (latest timestamp) to oldest (earliest timestamp).
     pub fn sort_entries(&mut self) {
-        self.journal.entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        self.journal
+            .entries
+            .sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     }
 
     /// Sort contacts in-place alphabetically: last name first, then first name.
@@ -97,7 +109,9 @@ impl App {
         self.journal.contacts.sort_by(|a, b| {
             let last_cmp = a.last_name.to_lowercase().cmp(&b.last_name.to_lowercase());
             if last_cmp == std::cmp::Ordering::Equal {
-                a.first_name.to_lowercase().cmp(&b.first_name.to_lowercase())
+                a.first_name
+                    .to_lowercase()
+                    .cmp(&b.first_name.to_lowercase())
             } else {
                 last_cmp
             }
@@ -135,7 +149,9 @@ impl App {
                 self.status_msg = Some("New entry saved".to_string());
             }
             AppMode::Writing { is_edit: true } => {
-                if !self.journal.entries.is_empty() && self.selected_index < self.journal.entries.len() {
+                if !self.journal.entries.is_empty()
+                    && self.selected_index < self.journal.entries.len()
+                {
                     self.journal.entries[self.selected_index].content = content;
                     self.status_msg = Some("Entry updated".to_string());
                 }
@@ -144,7 +160,10 @@ impl App {
         }
 
         // Save to disk immediately
-        if let Err(e) = self.journal.save(&self.file_path, &self.password, &self.salt) {
+        if let Err(e) = self
+            .journal
+            .save(&self.file_path, &self.password, &self.salt)
+        {
             self.error_msg = Some(format!("Write failed: {}", e));
         } else {
             self.mode = AppMode::List;
@@ -162,7 +181,10 @@ impl App {
 
         self.journal.entries.remove(self.selected_index);
 
-        if let Err(e) = self.journal.save(&self.file_path, &self.password, &self.salt) {
+        if let Err(e) = self
+            .journal
+            .save(&self.file_path, &self.password, &self.salt)
+        {
             self.error_msg = Some(format!("Delete write failed: {}", e));
         } else {
             self.status_msg = Some("Entry deleted".to_string());
@@ -208,7 +230,9 @@ impl App {
         let handle_lower = handle.to_lowercase();
         let is_unique = !self.journal.contacts.iter().any(|c| {
             let is_same_contact = match self.mode {
-                AppMode::Writing { is_edit: true } => c.id == self.journal.contacts[self.selected_index].id,
+                AppMode::Writing { is_edit: true } => {
+                    c.id == self.journal.contacts[self.selected_index].id
+                }
                 _ => false,
             };
             !is_same_contact && c.handle.to_lowercase() == handle_lower
@@ -235,7 +259,9 @@ impl App {
                 self.status_msg = Some("New contact saved".to_string());
             }
             AppMode::Writing { is_edit: true } => {
-                if !self.journal.contacts.is_empty() && self.selected_index < self.journal.contacts.len() {
+                if !self.journal.contacts.is_empty()
+                    && self.selected_index < self.journal.contacts.len()
+                {
                     let contact = &mut self.journal.contacts[self.selected_index];
                     contact.first_name = first;
                     contact.middle_name = middle;
@@ -250,7 +276,10 @@ impl App {
         }
 
         // Save to disk immediately
-        if let Err(e) = self.journal.save(&self.file_path, &self.password, &self.salt) {
+        if let Err(e) = self
+            .journal
+            .save(&self.file_path, &self.password, &self.salt)
+        {
             self.error_msg = Some(format!("Write failed: {}", e));
         } else {
             self.mode = AppMode::List;
@@ -268,7 +297,10 @@ impl App {
 
         self.journal.contacts.remove(self.selected_index);
 
-        if let Err(e) = self.journal.save(&self.file_path, &self.password, &self.salt) {
+        if let Err(e) = self
+            .journal
+            .save(&self.file_path, &self.password, &self.salt)
+        {
             self.error_msg = Some(format!("Delete write failed: {}", e));
         } else {
             self.status_msg = Some("Contact deleted".to_string());

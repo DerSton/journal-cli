@@ -1,7 +1,7 @@
-use argon2::{Argon2, Algorithm, Version, Params};
+use argon2::{Algorithm, Argon2, Params, Version};
 use chacha20poly1305::{
+    ChaCha20Poly1305, Key, Nonce,
     aead::{Aead, KeyInit},
-    ChaCha20Poly1305, Nonce, Key
 };
 
 pub const KEY_SIZE: usize = 32; // 256 bits
@@ -15,37 +15,51 @@ pub fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; KEY_SIZE], String>
     if salt.len() != SALT_SIZE {
         return Err(format!("Salt must be exactly {} bytes", SALT_SIZE));
     }
-    
+
     let params = Params::new(19456, 2, 1, Some(KEY_SIZE))
         .map_err(|e| format!("Failed to initialize Argon2 parameters: {}", e))?;
-        
+
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    
+
     let mut derived_key = [0u8; KEY_SIZE];
-    argon2.hash_password_into(password.as_bytes(), salt, &mut derived_key)
+    argon2
+        .hash_password_into(password.as_bytes(), salt, &mut derived_key)
         .map_err(|e| format!("Key derivation failed: {}", e))?;
-        
+
     Ok(derived_key)
 }
 
 /// Encrypts plaintext bytes using ChaCha20Poly1305 with the derived key and a nonce.
-pub fn encrypt(key: &[u8; KEY_SIZE], nonce: &[u8; NONCE_SIZE], plaintext: &[u8]) -> Result<Vec<u8>, String> {
+pub fn encrypt(
+    key: &[u8; KEY_SIZE],
+    nonce: &[u8; NONCE_SIZE],
+    plaintext: &[u8],
+) -> Result<Vec<u8>, String> {
     let key_ref = Key::from_slice(key);
     let cipher = ChaCha20Poly1305::new(key_ref);
     let nonce_ref = Nonce::from_slice(nonce);
-    
-    cipher.encrypt(nonce_ref, plaintext)
+
+    cipher
+        .encrypt(nonce_ref, plaintext)
         .map_err(|e| format!("Encryption failed: {}", e))
 }
 
 /// Decrypts ciphertext bytes using ChaCha20Poly1305 with the derived key and a nonce.
-pub fn decrypt(key: &[u8; KEY_SIZE], nonce: &[u8; NONCE_SIZE], ciphertext: &[u8]) -> Result<Vec<u8>, String> {
+pub fn decrypt(
+    key: &[u8; KEY_SIZE],
+    nonce: &[u8; NONCE_SIZE],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, String> {
     let key_ref = Key::from_slice(key);
     let cipher = ChaCha20Poly1305::new(key_ref);
     let nonce_ref = Nonce::from_slice(nonce);
-    
-    cipher.decrypt(nonce_ref, ciphertext)
-        .map_err(|e| format!("Decryption failed (invalid password or corrupted file): {}", e))
+
+    cipher.decrypt(nonce_ref, ciphertext).map_err(|e| {
+        format!(
+            "Decryption failed (invalid password or corrupted file): {}",
+            e
+        )
+    })
 }
 
 #[cfg(test)]
@@ -76,7 +90,7 @@ mod tests {
 
         let key = derive_key(password, &salt).unwrap();
         let bad_key = derive_key(bad_password, &salt).unwrap();
-        
+
         let ciphertext = encrypt(&key, &nonce, plaintext).unwrap();
         let decrypt_result = decrypt(&bad_key, &nonce, &ciphertext);
 
