@@ -1,4 +1,5 @@
 use crate::app::{App, AppMode, Tab};
+use crate::journal::Contact;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -429,6 +430,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             Constraint::Length(3), // Middle Name
                             Constraint::Length(3), // Last Name
                             Constraint::Length(3), // Handle
+                            Constraint::Length(3), // Birthdate
+                            Constraint::Length(3), // Date of Death
                             Constraint::Length(5), // Notes
                             Constraint::Min(0),    // Hints / Navigation instructions
                         ])
@@ -490,10 +493,60 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     app.contact_handle.set_cursor_line_style(Style::default());
                     f.render_widget(&app.contact_handle, form_chunks[3]);
 
-                    let block_notes = Block::default()
+                    let block_birth = Block::default()
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded)
                         .border_style(Style::default().fg(if app.active_field_index == 4 {
+                            Color::Cyan
+                        } else {
+                            Color::DarkGray
+                        }))
+                        .title(" Birthdate ");
+                    let birth_val = match app.contact_birthdate {
+                        Some(d) => Span::styled(
+                            format!(
+                                " 📅 {}",
+                                Contact::format_date(d, &app.journal.settings.locale)
+                            ),
+                            Style::default().fg(Color::White),
+                        ),
+                        None => Span::styled(
+                            " [ Press Enter to select ]",
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                    };
+                    let birth_p = Paragraph::new(Line::from(birth_val)).block(block_birth);
+                    f.render_widget(birth_p, form_chunks[4]);
+
+                    let block_death = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(if app.active_field_index == 5 {
+                            Color::Cyan
+                        } else {
+                            Color::DarkGray
+                        }))
+                        .title(" Date of Death ");
+                    let death_val = match app.contact_deathdate {
+                        Some(d) => Span::styled(
+                            format!(
+                                " 📅 {}",
+                                Contact::format_date(d, &app.journal.settings.locale)
+                            ),
+                            Style::default().fg(Color::White),
+                        ),
+                        None => Span::styled(
+                            " [ Press Enter to select ]",
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                    };
+                    let death_p = Paragraph::new(Line::from(death_val)).block(block_death);
+                    f.render_widget(death_p, form_chunks[5]);
+
+                    let block_notes = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(if app.active_field_index == 6 {
                             Color::Cyan
                         } else {
                             Color::DarkGray
@@ -502,7 +555,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     app.contact_notes.set_block(block_notes);
                     app.contact_notes
                         .set_cursor_line_style(Style::default().bg(Color::Indexed(235)));
-                    f.render_widget(&app.contact_notes, form_chunks[4]);
+                    f.render_widget(&app.contact_notes, form_chunks[6]);
 
                     // Render hints & helpers
                     let hints = vec![
@@ -518,6 +571,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         ])
                         .alignment(ratatui::layout::Alignment::Center),
                         Line::from(vec![
+                            Span::styled(" Enter ", Style::default().fg(Color::Cyan)),
+                            Span::raw("Open Calendar (on Date fields)   "),
+                            Span::styled(" Backspace / Delete ", Style::default().fg(Color::Cyan)),
+                            Span::raw("Clear Date"),
+                        ])
+                        .alignment(ratatui::layout::Alignment::Center),
+                        Line::from(vec![
                             Span::styled(
                                 " Ctrl + S ",
                                 Style::default()
@@ -530,7 +590,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         ])
                         .alignment(ratatui::layout::Alignment::Center),
                     ];
-                    f.render_widget(Paragraph::new(hints), form_chunks[5]);
+                    f.render_widget(Paragraph::new(hints), form_chunks[7]);
                 }
                 _ => {
                     if app.journal.contacts.is_empty() {
@@ -632,9 +692,54 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                                     Style::default().fg(Color::White),
                                 ),
                             ]),
+                        ];
+
+                        if let Some(birth) = contact.birthdate {
+                            let age_str = if let Some(age) = contact.calculate_age() {
+                                if contact.date_of_death.is_none() {
+                                    format!(" (Age: {})", age)
+                                } else {
+                                    "".to_string()
+                                }
+                            } else {
+                                "".to_string()
+                            };
+                            profile_text.push(Line::from(vec![
+                                Span::styled("  Born:        ", Style::default().fg(Color::Cyan)),
+                                Span::styled(
+                                    format!(
+                                        "{}{}",
+                                        Contact::format_date(birth, &app.journal.settings.locale),
+                                        age_str
+                                    ),
+                                    Style::default().fg(Color::White),
+                                ),
+                            ]));
+                        }
+
+                        if let Some(death) = contact.date_of_death {
+                            let age_str = if let Some(age) = contact.calculate_age() {
+                                format!(" (Aged: {})", age)
+                            } else {
+                                "".to_string()
+                            };
+                            profile_text.push(Line::from(vec![
+                                Span::styled("  Deceased:    ", Style::default().fg(Color::Cyan)),
+                                Span::styled(
+                                    format!(
+                                        "{}{}",
+                                        Contact::format_date(death, &app.journal.settings.locale),
+                                        age_str
+                                    ),
+                                    Style::default().fg(Color::White),
+                                ),
+                            ]));
+                        }
+
+                        profile_text.extend(vec![
                             Line::from(""),
                             Line::from(Span::styled("  Notes:", Style::default().fg(Color::Cyan))),
-                        ];
+                        ]);
 
                         if contact.notes.is_empty() {
                             profile_text.push(Line::from(Span::styled(
@@ -1188,6 +1293,20 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
             Span::styled("Cancel ", Style::default().fg(Color::White)),
         ],
+        AppMode::DatePicker { .. } => vec![
+            Span::styled(" Arrows/hjkl: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Nav ", Style::default().fg(Color::White)),
+            Span::styled(" PgUp/PgDn: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Month ", Style::default().fg(Color::White)),
+            Span::styled(" {/}: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Year ", Style::default().fg(Color::White)),
+            Span::styled(" Enter: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Pick ", Style::default().fg(Color::White)),
+            Span::styled(" c: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Clear ", Style::default().fg(Color::White)),
+            Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Cancel ", Style::default().fg(Color::White)),
+        ],
         AppMode::DeleteConfirm => vec![
             Span::styled(
                 " Confirm Delete? ",
@@ -1308,6 +1427,134 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
         f.render_stateful_widget(list_widget, modal_area, &mut list_state);
     }
+
+    // --- DRAW OVERLAY FOR DATEPICKER DIALOG ---
+    if let AppMode::DatePicker {
+        field_index,
+        current_date,
+        ..
+    } = app.mode
+    {
+        use chrono::Datelike;
+
+        let modal_area = centered_rect_fixed(34, 13, f.area());
+        f.render_widget(Clear, modal_area);
+
+        let field_name = if field_index == 4 {
+            "Birthdate"
+        } else {
+            "Date of Death"
+        };
+        let title_text = format!(" Select {} ", field_name);
+        let picker_block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Double)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(Span::styled(
+                title_text,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ));
+
+        let year = current_date.year();
+        let month = current_date.month();
+
+        let month_name = match month {
+            1 => "January",
+            2 => "February",
+            3 => "March",
+            4 => "April",
+            5 => "May",
+            6 => "June",
+            7 => "July",
+            8 => "August",
+            9 => "September",
+            10 => "October",
+            11 => "November",
+            12 => "December",
+            _ => "",
+        };
+
+        let header_text = format!("{} {}", month_name, year);
+
+        let mut calendar_lines = Vec::new();
+        calendar_lines.push(Line::from(""));
+        calendar_lines.push(Line::from(vec![Span::styled(
+            format!("  {:^28}  ", header_text),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]));
+        calendar_lines.push(Line::from(vec![Span::styled(
+            "   Mo  Tu  We  Th  Fr  Sa  Su   ",
+            Style::default().fg(Color::DarkGray),
+        )]));
+        calendar_lines.push(Line::from(vec![Span::styled(
+            "  ────────────────────────────  ",
+            Style::default().fg(Color::DarkGray),
+        )]));
+
+        fn days_in_month(year: i32, month: u32) -> u32 {
+            match month {
+                1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+                4 | 6 | 9 | 11 => 30,
+                2 => {
+                    if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
+                        29
+                    } else {
+                        28
+                    }
+                }
+                _ => 30,
+            }
+        }
+
+        let first_day = chrono::NaiveDate::from_ymd_opt(year, month, 1).unwrap();
+        let weekday_offset = (first_day.weekday().number_from_monday() - 1) as usize;
+        let days_count = days_in_month(year, month);
+
+        for row in 0..6 {
+            let mut row_spans = vec![Span::raw("   ")];
+            for col in 0..7 {
+                let cell_idx = row * 7 + col;
+                if cell_idx < weekday_offset || cell_idx >= weekday_offset + days_count as usize {
+                    row_spans.push(Span::raw("    "));
+                } else {
+                    let day = (cell_idx - weekday_offset + 1) as u32;
+                    let cell_date = chrono::NaiveDate::from_ymd_opt(year, month, day).unwrap();
+                    let is_selected = cell_date == current_date;
+
+                    let cell_str = if day < 10 {
+                        format!("  {} ", day)
+                    } else {
+                        format!(" {} ", day)
+                    };
+
+                    let style = if is_selected {
+                        Style::default()
+                            .bg(Color::Cyan)
+                            .fg(Color::Black)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::White)
+                    };
+                    row_spans.push(Span::styled(cell_str, style));
+                }
+            }
+            row_spans.push(Span::raw(" "));
+            calendar_lines.push(Line::from(row_spans));
+        }
+
+        calendar_lines.push(Line::from(vec![Span::styled(
+            "   PgUp/Dn: ±Month  {/}: ±Year   ",
+            Style::default().fg(Color::DarkGray),
+        )]));
+
+        let calendar_p = Paragraph::new(calendar_lines).block(picker_block);
+
+        f.render_widget(calendar_p, modal_area);
+    }
 }
 
 /// Helper function to center a modal window on screen
@@ -1327,6 +1574,27 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
             Constraint::Percentage(percent_x),
             Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
+
+/// Helper function to center a fixed size modal window on screen
+fn centered_rect_fixed(width: u16, height: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(r.height.saturating_sub(height) / 2),
+            Constraint::Length(height),
+            Constraint::Min(0),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(r.width.saturating_sub(width) / 2),
+            Constraint::Length(width),
+            Constraint::Min(0),
         ])
         .split(popup_layout[1])[1]
 }

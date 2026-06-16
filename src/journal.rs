@@ -25,9 +25,52 @@ pub struct Contact {
     pub handle: String,
     #[serde(default)]
     pub notes: String,
+    #[serde(default)]
+    pub birthdate: Option<chrono::NaiveDate>,
+    #[serde(default)]
+    pub date_of_death: Option<chrono::NaiveDate>,
 }
 
 impl Contact {
+    /// Helper to format a NaiveDate localized.
+    pub fn format_date(date: chrono::NaiveDate, locale_str: &str) -> String {
+        let locale = match locale_str {
+            "de_DE" => chrono::Locale::de_DE,
+            "fr_FR" => chrono::Locale::fr_FR,
+            "es_ES" => chrono::Locale::es_ES,
+            "it_IT" => chrono::Locale::it_IT,
+            "ja_JP" => chrono::Locale::ja_JP,
+            _ => chrono::Locale::en_US,
+        };
+        let fmt = match locale_str {
+            "de_DE" => "%d.%m.%Y",
+            "fr_FR" => "%d/%m/%Y",
+            "es_ES" => "%d/%m/%Y",
+            "it_IT" => "%d/%m/%Y",
+            "ja_JP" => "%Y/%m/%d",
+            _ => "%Y-%m-%d",
+        };
+        date.format_localized(fmt, locale).to_string()
+    }
+
+    /// Calculates current age, or age at death if date_of_death is set.
+    pub fn calculate_age(&self) -> Option<u32> {
+        use chrono::Datelike;
+        let birth = self.birthdate?;
+        let end_date = self
+            .date_of_death
+            .unwrap_or_else(|| chrono::Local::now().date_naive());
+        if end_date < birth {
+            return None;
+        }
+        let mut age = end_date.year() - birth.year();
+        if end_date.month() < birth.month()
+            || (end_date.month() == birth.month() && end_date.day() < birth.day())
+        {
+            age -= 1;
+        }
+        Some(age as u32)
+    }
     /// Returns the full name with a single space separating the non-empty fields.
     pub fn full_name(&self) -> String {
         let mut parts = Vec::new();
@@ -315,5 +358,45 @@ mod tests {
         assert!(formatted_de.contains("Dienstag"));
         assert!(formatted_de.contains("Juni"));
         assert!(formatted_de.contains("13:00:00"));
+    }
+
+    #[test]
+    fn test_contact_age_and_serialization() {
+        use chrono::NaiveDate;
+
+        let mut contact = Contact {
+            id: "123".to_string(),
+            first_name: "John".to_string(),
+            middle_name: "".to_string(),
+            last_name: "Doe".to_string(),
+            handle: "johndoe".to_string(),
+            notes: "".to_string(),
+            birthdate: Some(NaiveDate::from_ymd_opt(1990, 5, 15).unwrap()),
+            date_of_death: None,
+        };
+
+        // If alive, age is calculated relative to now (non-deterministic, but we know it's at least 36 years if we are in 2026).
+        assert!(contact.calculate_age().unwrap_or(0) >= 36);
+
+        // If deceased, age is exact based on date of death
+        contact.date_of_death = Some(NaiveDate::from_ymd_opt(2026, 6, 16).unwrap());
+        // 1990-05-15 to 2026-06-16 is 36 years, 1 month
+        assert_eq!(contact.calculate_age(), Some(36));
+
+        // Birthday not yet reached (e.g. death day is May 14th)
+        contact.date_of_death = Some(NaiveDate::from_ymd_opt(2026, 5, 14).unwrap());
+        assert_eq!(contact.calculate_age(), Some(35));
+
+        // Serialization check
+        let serialized = serde_json::to_string(&contact).unwrap();
+        let deserialized: Contact = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(
+            deserialized.birthdate,
+            Some(NaiveDate::from_ymd_opt(1990, 5, 15).unwrap())
+        );
+        assert_eq!(
+            deserialized.date_of_death,
+            Some(NaiveDate::from_ymd_opt(2026, 5, 14).unwrap())
+        );
     }
 }

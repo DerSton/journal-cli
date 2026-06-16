@@ -21,6 +21,11 @@ pub enum AppMode {
         is_edit: bool,
         selected_contact_index: usize,
     },
+    DatePicker {
+        is_edit: bool,
+        field_index: usize,
+        current_date: chrono::NaiveDate,
+    },
     DeleteConfirm,
 }
 
@@ -48,8 +53,10 @@ pub struct App {
     pub contact_middle_name: TextArea<'static>,
     pub contact_last_name: TextArea<'static>,
     pub contact_handle: TextArea<'static>,
+    pub contact_birthdate: Option<chrono::NaiveDate>,
+    pub contact_deathdate: Option<chrono::NaiveDate>,
     pub contact_notes: TextArea<'static>,
-    /// Active field index in the contact editor (0: First, 1: Middle, 2: Last, 3: Handle, 4: Notes).
+    /// Active field index in the contact editor (0: First, 1: Middle, 2: Last, 3: Handle, 4: Birthdate, 5: Deathdate, 6: Notes).
     pub active_field_index: usize,
 
     // Settings Fields
@@ -93,6 +100,8 @@ impl App {
             contact_middle_name: TextArea::default(),
             contact_last_name: TextArea::default(),
             contact_handle: TextArea::default(),
+            contact_birthdate: None,
+            contact_deathdate: None,
             contact_notes: TextArea::default(),
             active_field_index: 0,
             settings_password_new: TextArea::default(),
@@ -265,6 +274,8 @@ impl App {
                     last_name: last,
                     handle,
                     notes,
+                    birthdate: self.contact_birthdate,
+                    date_of_death: self.contact_deathdate,
                 };
                 self.journal.contacts.push(new_contact);
                 self.sort_contacts();
@@ -281,6 +292,8 @@ impl App {
                     contact.last_name = last;
                     contact.handle = handle;
                     contact.notes = notes;
+                    contact.birthdate = self.contact_birthdate;
+                    contact.date_of_death = self.contact_deathdate;
                     self.sort_contacts();
                     self.status_msg = Some("Contact updated".to_string());
                 }

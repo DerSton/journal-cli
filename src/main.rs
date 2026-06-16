@@ -178,6 +178,8 @@ where
                                         app.contact_last_name =
                                             ratatui_textarea::TextArea::default();
                                         app.contact_handle = ratatui_textarea::TextArea::default();
+                                        app.contact_birthdate = None;
+                                        app.contact_deathdate = None;
                                         app.contact_notes = ratatui_textarea::TextArea::default();
                                         app.active_field_index = 0;
                                         app.handle_edited = false;
@@ -223,6 +225,8 @@ where
                                                 ratatui_textarea::TextArea::new(vec![
                                                     contact.handle.clone(),
                                                 ]);
+                                            app.contact_birthdate = contact.birthdate;
+                                            app.contact_deathdate = contact.date_of_death;
                                             app.contact_notes = ratatui_textarea::TextArea::new(
                                                 contact.notes.lines().map(String::from).collect(),
                                             );
@@ -322,12 +326,12 @@ where
                                         app.mode = AppMode::List;
                                     } else if key.code == KeyCode::Tab || key.code == KeyCode::Down
                                     {
-                                        app.active_field_index = (app.active_field_index + 1) % 5;
+                                        app.active_field_index = (app.active_field_index + 1) % 7;
                                     } else if key.code == KeyCode::BackTab
                                         || key.code == KeyCode::Up
                                     {
                                         app.active_field_index = if app.active_field_index == 0 {
-                                            4
+                                            6
                                         } else {
                                             app.active_field_index - 1
                                         };
@@ -349,7 +353,34 @@ where
                                                 app.contact_handle.input(key);
                                                 app.handle_edited = true;
                                             }
-                                            4 => {
+                                            4 | 5 => {
+                                                if key.code == KeyCode::Enter {
+                                                    let current_val = if app.active_field_index == 4
+                                                    {
+                                                        app.contact_birthdate
+                                                    } else {
+                                                        app.contact_deathdate
+                                                    };
+                                                    let start_date =
+                                                        current_val.unwrap_or_else(|| {
+                                                            chrono::Local::now().date_naive()
+                                                        });
+                                                    app.mode = AppMode::DatePicker {
+                                                        is_edit,
+                                                        field_index: app.active_field_index,
+                                                        current_date: start_date,
+                                                    };
+                                                } else if key.code == KeyCode::Backspace
+                                                    || key.code == KeyCode::Delete
+                                                {
+                                                    if app.active_field_index == 4 {
+                                                        app.contact_birthdate = None;
+                                                    } else {
+                                                        app.contact_deathdate = None;
+                                                    }
+                                                }
+                                            }
+                                            6 => {
                                                 app.contact_notes.input(key);
                                             }
                                             _ => {}
@@ -554,6 +585,104 @@ where
                                         .insert_str(&format!("{{{{person|{}}}}}", handle));
                                 }
                                 app.mode = AppMode::Writing { is_edit };
+                            }
+                            _ => {}
+                        },
+                        AppMode::DatePicker {
+                            is_edit,
+                            field_index,
+                            current_date,
+                        } => match key.code {
+                            KeyCode::Esc => {
+                                app.mode = AppMode::Writing { is_edit };
+                            }
+                            KeyCode::Char('c') | KeyCode::Char('C') => {
+                                if field_index == 4 {
+                                    app.contact_birthdate = None;
+                                } else {
+                                    app.contact_deathdate = None;
+                                }
+                                app.mode = AppMode::Writing { is_edit };
+                            }
+                            KeyCode::Enter => {
+                                if field_index == 4 {
+                                    app.contact_birthdate = Some(current_date);
+                                } else {
+                                    app.contact_deathdate = Some(current_date);
+                                }
+                                app.mode = AppMode::Writing { is_edit };
+                            }
+                            KeyCode::Left | KeyCode::Char('h') => {
+                                let next_date = current_date - chrono::Duration::days(1);
+                                app.mode = AppMode::DatePicker {
+                                    is_edit,
+                                    field_index,
+                                    current_date: next_date,
+                                };
+                            }
+                            KeyCode::Right | KeyCode::Char('l') => {
+                                let next_date = current_date + chrono::Duration::days(1);
+                                app.mode = AppMode::DatePicker {
+                                    is_edit,
+                                    field_index,
+                                    current_date: next_date,
+                                };
+                            }
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                let next_date = current_date - chrono::Duration::days(7);
+                                app.mode = AppMode::DatePicker {
+                                    is_edit,
+                                    field_index,
+                                    current_date: next_date,
+                                };
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                let next_date = current_date + chrono::Duration::days(7);
+                                app.mode = AppMode::DatePicker {
+                                    is_edit,
+                                    field_index,
+                                    current_date: next_date,
+                                };
+                            }
+                            KeyCode::PageUp | KeyCode::Char('[') => {
+                                let next_date = current_date
+                                    .checked_sub_months(chrono::Months::new(1))
+                                    .unwrap_or(current_date);
+                                app.mode = AppMode::DatePicker {
+                                    is_edit,
+                                    field_index,
+                                    current_date: next_date,
+                                };
+                            }
+                            KeyCode::PageDown | KeyCode::Char(']') => {
+                                let next_date = current_date
+                                    .checked_add_months(chrono::Months::new(1))
+                                    .unwrap_or(current_date);
+                                app.mode = AppMode::DatePicker {
+                                    is_edit,
+                                    field_index,
+                                    current_date: next_date,
+                                };
+                            }
+                            KeyCode::Home | KeyCode::Char('{') => {
+                                let next_date = current_date
+                                    .checked_sub_months(chrono::Months::new(12))
+                                    .unwrap_or(current_date);
+                                app.mode = AppMode::DatePicker {
+                                    is_edit,
+                                    field_index,
+                                    current_date: next_date,
+                                };
+                            }
+                            KeyCode::End | KeyCode::Char('}') => {
+                                let next_date = current_date
+                                    .checked_add_months(chrono::Months::new(12))
+                                    .unwrap_or(current_date);
+                                app.mode = AppMode::DatePicker {
+                                    is_edit,
+                                    field_index,
+                                    current_date: next_date,
+                                };
                             }
                             _ => {}
                         },
