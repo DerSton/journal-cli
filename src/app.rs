@@ -4,6 +4,16 @@ use chrono::Utc;
 use ratatui_textarea::TextArea;
 use uuid::Uuid;
 
+pub const BLOOD_TYPE_OPTIONS: &[&str] = &["N/A", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+pub const MARITAL_STATUS_OPTIONS: &[&str] = &[
+    "N/A",
+    "Single",
+    "Married",
+    "Divorced",
+    "Widowed",
+    "Registered Partnership",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Journal,
@@ -52,14 +62,28 @@ pub struct App {
     pub textarea: TextArea<'static>,
 
     // Contact Form Fields
-    pub contact_first_name: TextArea<'static>,
-    pub contact_middle_name: TextArea<'static>,
-    pub contact_last_name: TextArea<'static>,
-    pub contact_handle: TextArea<'static>,
-    pub contact_birthdate: Option<chrono::NaiveDate>,
-    pub contact_deathdate: Option<chrono::NaiveDate>,
-    pub contact_notes: TextArea<'static>,
-    /// Active field index in the contact editor (0: First, 1: Middle, 2: Last, 3: Handle, 4: Birthdate, 5: Deathdate, 6: Notes).
+    pub contact_form_tab: usize,
+    pub contact_form_title: TextArea<'static>,
+    pub contact_form_first_names: Vec<TextArea<'static>>,
+    pub contact_form_last_name: TextArea<'static>,
+    pub contact_form_nickname: TextArea<'static>,
+    pub contact_form_preferred_name: TextArea<'static>,
+    pub contact_form_maiden_name: TextArea<'static>,
+    pub contact_form_suffix: TextArea<'static>,
+    pub contact_form_birthdate: TextArea<'static>,
+    pub contact_form_deathdate: TextArea<'static>,
+    pub contact_form_gender: TextArea<'static>,
+    pub contact_form_pronouns: TextArea<'static>,
+    pub contact_form_nationalities: Vec<TextArea<'static>>,
+    pub contact_form_languages: Vec<TextArea<'static>>,
+    pub contact_form_marital_status_idx: usize,
+    pub contact_form_blood_type_idx: usize,
+    pub contact_form_religion: TextArea<'static>,
+    pub contact_form_eye_color: TextArea<'static>,
+    pub contact_form_hair_color: TextArea<'static>,
+    pub contact_form_height: TextArea<'static>,
+    pub contact_form_notes: TextArea<'static>,
+    /// Active field index in the contact editor (indexes fields of the current active tab).
     pub active_field_index: usize,
 
     // Settings Fields
@@ -76,8 +100,6 @@ pub struct App {
     pub should_quit: bool,
     /// Vertical scroll offset for the details pane.
     pub detail_scroll: u16,
-    /// Whether the contact handle was manually edited.
-    pub handle_edited: bool,
     // Temporary Settings Fields for editing
     pub temp_timeout_mins: u32,
     pub temp_lock_on_suspend: bool,
@@ -110,13 +132,27 @@ impl App {
             selected_index: 0,
             mode: AppMode::List,
             textarea: TextArea::default(),
-            contact_first_name: TextArea::default(),
-            contact_middle_name: TextArea::default(),
-            contact_last_name: TextArea::default(),
-            contact_handle: TextArea::default(),
-            contact_birthdate: None,
-            contact_deathdate: None,
-            contact_notes: TextArea::default(),
+            contact_form_tab: 0,
+            contact_form_title: TextArea::default(),
+            contact_form_first_names: vec![TextArea::default()],
+            contact_form_last_name: TextArea::default(),
+            contact_form_nickname: TextArea::default(),
+            contact_form_preferred_name: TextArea::default(),
+            contact_form_maiden_name: TextArea::default(),
+            contact_form_suffix: TextArea::default(),
+            contact_form_birthdate: TextArea::default(),
+            contact_form_deathdate: TextArea::default(),
+            contact_form_gender: TextArea::default(),
+            contact_form_pronouns: TextArea::default(),
+            contact_form_nationalities: vec![TextArea::default()],
+            contact_form_languages: vec![TextArea::default()],
+            contact_form_marital_status_idx: 0,
+            contact_form_blood_type_idx: 0,
+            contact_form_religion: TextArea::default(),
+            contact_form_eye_color: TextArea::default(),
+            contact_form_hair_color: TextArea::default(),
+            contact_form_height: TextArea::default(),
+            contact_form_notes: TextArea::default(),
             active_field_index: 0,
             settings_password_new: TextArea::default(),
             settings_password_confirm: TextArea::default(),
@@ -126,7 +162,6 @@ impl App {
             status_msg: Some("Welcome to your secure journal CLI!".to_string()),
             should_quit: false,
             detail_scroll: 0,
-            handle_edited: false,
             temp_timeout_mins,
             temp_lock_on_suspend,
             recovery_shares: Vec::new(),
@@ -247,44 +282,249 @@ impl App {
         self.detail_scroll = 0;
     }
 
+    /// Initializes the contact form state.
+    pub fn init_contact_form(&mut self, is_edit: bool) {
+        self.contact_form_tab = 0;
+        self.active_field_index = 0;
+        self.error_msg = None;
+
+        if is_edit
+            && !self.journal.contacts.is_empty()
+            && self.selected_index < self.journal.contacts.len()
+        {
+            let contact = &self.journal.contacts[self.selected_index];
+            self.contact_form_title = TextArea::new(vec![contact.title.clone()]);
+
+            // First names list: populate and make sure we have at least one empty at the end
+            let mut f_names: Vec<TextArea<'static>> = contact
+                .first_names
+                .iter()
+                .map(|name| TextArea::new(vec![name.clone()]))
+                .collect();
+            f_names.push(TextArea::default());
+            self.contact_form_first_names = f_names;
+
+            self.contact_form_last_name = TextArea::new(vec![contact.last_name.clone()]);
+            self.contact_form_nickname = TextArea::new(vec![contact.nickname.clone()]);
+            self.contact_form_preferred_name = TextArea::new(vec![contact.preferred_name.clone()]);
+            self.contact_form_maiden_name = TextArea::new(vec![contact.maiden_name.clone()]);
+            self.contact_form_suffix = TextArea::new(vec![contact.suffix.clone()]);
+
+            let birth_str = contact
+                .birthdate
+                .map(|d| d.format("%Y-%m-%d").to_string())
+                .unwrap_or_default();
+            self.contact_form_birthdate = TextArea::new(vec![birth_str]);
+
+            let death_str = contact
+                .date_of_death
+                .map(|d| d.format("%Y-%m-%d").to_string())
+                .unwrap_or_default();
+            self.contact_form_deathdate = TextArea::new(vec![death_str]);
+
+            self.contact_form_gender = TextArea::new(vec![contact.gender.clone()]);
+            self.contact_form_pronouns = TextArea::new(vec![contact.pronouns.clone()]);
+
+            // Nationalities list
+            let mut nats: Vec<TextArea<'static>> = contact
+                .nationalities
+                .iter()
+                .map(|nat| TextArea::new(vec![nat.clone()]))
+                .collect();
+            nats.push(TextArea::default());
+            self.contact_form_nationalities = nats;
+
+            // Languages list
+            let mut langs: Vec<TextArea<'static>> = contact
+                .languages
+                .iter()
+                .map(|lang| TextArea::new(vec![lang.clone()]))
+                .collect();
+            langs.push(TextArea::default());
+            self.contact_form_languages = langs;
+
+            // Select index matching
+            self.contact_form_marital_status_idx = MARITAL_STATUS_OPTIONS
+                .iter()
+                .position(|&opt| opt == contact.marital_status)
+                .unwrap_or(0);
+
+            self.contact_form_blood_type_idx = BLOOD_TYPE_OPTIONS
+                .iter()
+                .position(|&opt| opt == contact.blood_type)
+                .unwrap_or(0);
+
+            self.contact_form_religion = TextArea::new(vec![contact.religion.clone()]);
+            self.contact_form_eye_color = TextArea::new(vec![contact.eye_color.clone()]);
+            self.contact_form_hair_color = TextArea::new(vec![contact.hair_color.clone()]);
+
+            let height_str = contact.height.map(|h| h.to_string()).unwrap_or_default();
+            self.contact_form_height = TextArea::new(vec![height_str]);
+
+            self.contact_form_notes =
+                TextArea::new(contact.notes.lines().map(String::from).collect());
+        } else {
+            // New contact defaults
+            self.contact_form_title = TextArea::default();
+            self.contact_form_first_names = vec![TextArea::default()];
+            self.contact_form_last_name = TextArea::default();
+            self.contact_form_nickname = TextArea::default();
+            self.contact_form_preferred_name = TextArea::default();
+            self.contact_form_maiden_name = TextArea::default();
+            self.contact_form_suffix = TextArea::default();
+            self.contact_form_birthdate = TextArea::default();
+            self.contact_form_deathdate = TextArea::default();
+            self.contact_form_gender = TextArea::default();
+            self.contact_form_pronouns = TextArea::default();
+            self.contact_form_nationalities = vec![TextArea::default()];
+            self.contact_form_languages = vec![TextArea::default()];
+            self.contact_form_marital_status_idx = 0;
+            self.contact_form_blood_type_idx = 0;
+            self.contact_form_religion = TextArea::default();
+            self.contact_form_eye_color = TextArea::default();
+            self.contact_form_hair_color = TextArea::default();
+            self.contact_form_height = TextArea::default();
+            self.contact_form_notes = TextArea::default();
+        }
+
+        self.mode = AppMode::Writing { is_edit };
+    }
+
     /// Save the contact form fields to the database.
     pub fn handle_save_contact(&mut self) {
-        let first = self.contact_first_name.lines().join("").trim().to_string();
-        let middle = self.contact_middle_name.lines().join("").trim().to_string();
-        let last = self.contact_last_name.lines().join("").trim().to_string();
-        let mut handle = self.contact_handle.lines().join("").trim().to_string();
-        let notes = self.contact_notes.lines().join("\n").trim().to_string();
+        let title = self.contact_form_title.lines().join("").trim().to_string();
+        let first_names: Vec<String> = self
+            .contact_form_first_names
+            .iter()
+            .map(|ta| ta.lines().join("").trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let last_name = self
+            .contact_form_last_name
+            .lines()
+            .join("")
+            .trim()
+            .to_string();
+        let nickname = self
+            .contact_form_nickname
+            .lines()
+            .join("")
+            .trim()
+            .to_string();
+        let preferred_name = self
+            .contact_form_preferred_name
+            .lines()
+            .join("")
+            .trim()
+            .to_string();
+        let maiden_name = self
+            .contact_form_maiden_name
+            .lines()
+            .join("")
+            .trim()
+            .to_string();
+        let suffix = self.contact_form_suffix.lines().join("").trim().to_string();
+        let gender = self.contact_form_gender.lines().join("").trim().to_string();
+        let pronouns = self
+            .contact_form_pronouns
+            .lines()
+            .join("")
+            .trim()
+            .to_string();
+        let nationalities: Vec<String> = self
+            .contact_form_nationalities
+            .iter()
+            .map(|ta| ta.lines().join("").trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let languages: Vec<String> = self
+            .contact_form_languages
+            .iter()
+            .map(|ta| ta.lines().join("").trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let marital_status =
+            MARITAL_STATUS_OPTIONS[self.contact_form_marital_status_idx].to_string();
+        let blood_type = BLOOD_TYPE_OPTIONS[self.contact_form_blood_type_idx].to_string();
+        let religion = self
+            .contact_form_religion
+            .lines()
+            .join("")
+            .trim()
+            .to_string();
+        let eye_color = self
+            .contact_form_eye_color
+            .lines()
+            .join("")
+            .trim()
+            .to_string();
+        let hair_color = self
+            .contact_form_hair_color
+            .lines()
+            .join("")
+            .trim()
+            .to_string();
+        let notes = self
+            .contact_form_notes
+            .lines()
+            .join("\n")
+            .trim()
+            .to_string();
 
-        if first.is_empty() && last.is_empty() {
-            self.error_msg = Some("Error: First Name or Last Name must be provided".to_string());
-            return;
-        }
-
-        // Clean handle: remove starting '@' if present, make alphanumeric
-        if handle.starts_with('@') {
-            handle.remove(0);
-        }
-        let handle = handle.replace(' ', "");
-
-        if handle.is_empty() {
-            self.error_msg = Some("Error: Handle must not be empty".to_string());
-            return;
-        }
-
-        // Check handle uniqueness
-        let handle_lower = handle.to_lowercase();
-        let is_unique = !self.journal.contacts.iter().any(|c| {
-            let is_same_contact = match self.mode {
-                AppMode::Writing { is_edit: true } => {
-                    c.id == self.journal.contacts[self.selected_index].id
+        let height_str = self.contact_form_height.lines().join("").trim().to_string();
+        let height = if height_str.is_empty() {
+            None
+        } else {
+            match height_str.parse::<u32>() {
+                Ok(h) => Some(h),
+                Err(_) => {
+                    self.error_msg =
+                        Some("Error: Height must be a valid positive number".to_string());
+                    return;
                 }
-                _ => false,
-            };
-            !is_same_contact && c.handle.to_lowercase() == handle_lower
-        });
+            }
+        };
 
-        if !is_unique {
-            self.error_msg = Some(format!("Error: Handle '@{}' is already taken", handle));
+        let birth_str = self
+            .contact_form_birthdate
+            .lines()
+            .join("")
+            .trim()
+            .to_string();
+        let birthdate = if birth_str.is_empty() {
+            None
+        } else {
+            match chrono::NaiveDate::parse_from_str(&birth_str, "%Y-%m-%d") {
+                Ok(d) => Some(d),
+                Err(_) => {
+                    self.error_msg =
+                        Some("Error: Birthdate must be in YYYY-MM-DD format".to_string());
+                    return;
+                }
+            }
+        };
+
+        let death_str = self
+            .contact_form_deathdate
+            .lines()
+            .join("")
+            .trim()
+            .to_string();
+        let date_of_death = if death_str.is_empty() {
+            None
+        } else {
+            match chrono::NaiveDate::parse_from_str(&death_str, "%Y-%m-%d") {
+                Ok(d) => Some(d),
+                Err(_) => {
+                    self.error_msg =
+                        Some("Error: Date of death must be in YYYY-MM-DD format".to_string());
+                    return;
+                }
+            }
+        };
+
+        if first_names.is_empty() && last_name.is_empty() {
+            self.error_msg = Some("Error: First Name or Last Name must be provided".to_string());
             return;
         }
 
@@ -292,13 +532,29 @@ impl App {
             AppMode::Writing { is_edit: false } => {
                 let new_contact = Contact {
                     id: Uuid::new_v4().to_string(),
-                    first_name: first,
-                    middle_name: middle,
-                    last_name: last,
-                    handle,
+                    first_name: String::new(),
+                    middle_name: String::new(),
+                    handle: String::new(),
+                    first_names,
+                    last_name,
+                    title,
+                    nickname,
+                    preferred_name,
+                    maiden_name,
+                    suffix,
+                    gender,
+                    pronouns,
+                    nationalities,
+                    languages,
+                    religion,
+                    marital_status,
+                    blood_type,
+                    eye_color,
+                    hair_color,
+                    height,
                     notes,
-                    birthdate: self.contact_birthdate,
-                    date_of_death: self.contact_deathdate,
+                    birthdate,
+                    date_of_death,
                 };
                 self.journal.contacts.push(new_contact);
                 self.sort_contacts();
@@ -310,13 +566,26 @@ impl App {
                     && self.selected_index < self.journal.contacts.len()
                 {
                     let contact = &mut self.journal.contacts[self.selected_index];
-                    contact.first_name = first;
-                    contact.middle_name = middle;
-                    contact.last_name = last;
-                    contact.handle = handle;
+                    contact.first_names = first_names;
+                    contact.last_name = last_name;
+                    contact.title = title;
+                    contact.nickname = nickname;
+                    contact.preferred_name = preferred_name;
+                    contact.maiden_name = maiden_name;
+                    contact.suffix = suffix;
+                    contact.gender = gender;
+                    contact.pronouns = pronouns;
+                    contact.nationalities = nationalities;
+                    contact.languages = languages;
+                    contact.marital_status = marital_status;
+                    contact.blood_type = blood_type;
+                    contact.religion = religion;
+                    contact.eye_color = eye_color;
+                    contact.hair_color = hair_color;
+                    contact.height = height;
                     contact.notes = notes;
-                    contact.birthdate = self.contact_birthdate;
-                    contact.date_of_death = self.contact_deathdate;
+                    contact.birthdate = birthdate;
+                    contact.date_of_death = date_of_death;
                     self.sort_contacts();
                     self.status_msg = Some("Contact updated".to_string());
                 }
@@ -334,6 +603,15 @@ impl App {
             self.mode = AppMode::List;
             self.detail_scroll = 0;
             self.error_msg = None;
+        }
+    }
+
+    pub fn contact_form_num_fields(&self) -> usize {
+        match self.contact_form_tab {
+            0 => 5 + self.contact_form_first_names.len(),
+            1 => 6 + self.contact_form_nationalities.len() + self.contact_form_languages.len(),
+            2 => 5,
+            _ => 0,
         }
     }
 

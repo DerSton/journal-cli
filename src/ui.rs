@@ -39,10 +39,10 @@ fn render_mentions<'a>(line: &'a str, contacts: &[crate::journal::Contact]) -> L
             }
 
             if found_closing && !handle.is_empty() {
-                // Find matching contact by handle (case-insensitive)
+                // Find matching contact by ID (UUID) or legacy handle (case-insensitive)
                 let found_contact = contacts
                     .iter()
-                    .find(|c| c.handle.to_lowercase() == handle.to_lowercase());
+                    .find(|c| c.id == handle || c.handle.to_lowercase() == handle.to_lowercase());
                 if let Some(contact) = found_contact {
                     // Push plain text prior to the handle
                     if start_idx > last_idx {
@@ -463,171 +463,559 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                     let inner_area = content_area.inner(ratatui::layout::Margin {
                         horizontal: 2,
-                        vertical: 2,
+                        vertical: 1,
                     });
-                    let form_chunks = Layout::default()
+
+                    // Split inner area into Tab Header (height 2) and Content (rest)
+                    let layout_main = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints([
-                            Constraint::Length(3), // First Name
-                            Constraint::Length(3), // Middle Name
-                            Constraint::Length(3), // Last Name
-                            Constraint::Length(3), // Handle
-                            Constraint::Length(3), // Birthdate
-                            Constraint::Length(3), // Date of Death
-                            Constraint::Length(5), // Notes
-                            Constraint::Min(0),    // Hints / Navigation instructions
+                            Constraint::Length(2), // Tab Headers
+                            Constraint::Min(0),    // Active Tab Fields & Hints
                         ])
                         .split(inner_area);
 
-                    // Configure and render individual form fields
-                    let block_first = Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(if app.active_field_index == 0 {
-                            Color::Cyan
-                        } else {
-                            Color::DarkGray
-                        }))
-                        .title(app.tr(TrKey::FormFirstNameTitle));
-                    app.contact_first_name.set_block(block_first);
-                    app.contact_first_name
-                        .set_cursor_line_style(Style::default());
-                    f.render_widget(&app.contact_first_name, form_chunks[0]);
-
-                    let block_middle = Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(if app.active_field_index == 1 {
-                            Color::Cyan
-                        } else {
-                            Color::DarkGray
-                        }))
-                        .title(app.tr(TrKey::FormMiddleNameTitle));
-                    app.contact_middle_name.set_block(block_middle);
-                    app.contact_middle_name
-                        .set_cursor_line_style(Style::default());
-                    f.render_widget(&app.contact_middle_name, form_chunks[1]);
-
-                    let block_last = Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(if app.active_field_index == 2 {
-                            Color::Cyan
-                        } else {
-                            Color::DarkGray
-                        }))
-                        .title(app.tr(TrKey::FormLastNameTitle));
-                    app.contact_last_name.set_block(block_last);
-                    app.contact_last_name
-                        .set_cursor_line_style(Style::default());
-                    f.render_widget(&app.contact_last_name, form_chunks[2]);
-
-                    let block_handle = Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(if app.active_field_index == 3 {
-                            Color::Cyan
-                        } else {
-                            Color::DarkGray
-                        }))
-                        .title(app.tr(TrKey::FormHandleTitle));
-                    app.contact_handle.set_block(block_handle);
-                    app.contact_handle.set_cursor_line_style(Style::default());
-                    f.render_widget(&app.contact_handle, form_chunks[3]);
-
-                    let block_birth = Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(if app.active_field_index == 4 {
-                            Color::Cyan
-                        } else {
-                            Color::DarkGray
-                        }))
-                        .title(app.tr(TrKey::FormBirthdateTitle));
-                    let birth_val = match app.contact_birthdate {
-                        Some(d) => Span::styled(
-                            format!(" 📅 {}", Contact::format_date(d)),
-                            Style::default().fg(Color::White),
-                        ),
-                        None => Span::styled(
-                            app.tr(TrKey::FormPressEnterSelect),
-                            Style::default().fg(Color::DarkGray),
-                        ),
-                    };
-                    let birth_p = Paragraph::new(Line::from(birth_val)).block(block_birth);
-                    f.render_widget(birth_p, form_chunks[4]);
-
-                    let block_death = Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(if app.active_field_index == 5 {
-                            Color::Cyan
-                        } else {
-                            Color::DarkGray
-                        }))
-                        .title(app.tr(TrKey::FormDeathdateTitle));
-                    let death_val = match app.contact_deathdate {
-                        Some(d) => Span::styled(
-                            format!(" 📅 {}", Contact::format_date(d)),
-                            Style::default().fg(Color::White),
-                        ),
-                        None => Span::styled(
-                            app.tr(TrKey::FormPressEnterSelect),
-                            Style::default().fg(Color::DarkGray),
-                        ),
-                    };
-                    let death_p = Paragraph::new(Line::from(death_val)).block(block_death);
-                    f.render_widget(death_p, form_chunks[5]);
-
-                    let block_notes = Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(if app.active_field_index == 6 {
-                            Color::Cyan
-                        } else {
-                            Color::DarkGray
-                        }))
-                        .title(app.tr(TrKey::FormNotesTitle));
-                    app.contact_notes.set_block(block_notes);
-                    app.contact_notes
-                        .set_cursor_line_style(Style::default().bg(Color::Indexed(235)));
-                    f.render_widget(&app.contact_notes, form_chunks[6]);
-
-                    // Render hints & helpers
-                    let hints = vec![
-                        Line::from(app.tr(TrKey::FormControlsTitle))
-                            .alignment(ratatui::layout::Alignment::Center),
-                        Line::from(vec![
-                            Span::styled(" Tab / Down arrow ", Style::default().fg(Color::Cyan)),
-                            Span::raw(format!("{}   ", app.tr(TrKey::FormHintNext))),
-                            Span::styled(
-                                " Shift+Tab / Up arrow ",
-                                Style::default().fg(Color::Cyan),
-                            ),
-                            Span::raw(app.tr(TrKey::FormHintPrev)),
-                        ])
-                        .alignment(ratatui::layout::Alignment::Center),
-                        Line::from(vec![
-                            Span::styled(" Enter ", Style::default().fg(Color::Cyan)),
-                            Span::raw(format!("{}   ", app.tr(TrKey::FormHintOpenCalendar))),
-                            Span::styled(" Backspace / Delete ", Style::default().fg(Color::Cyan)),
-                            Span::raw(app.tr(TrKey::FormHintClearDate)),
-                        ])
-                        .alignment(ratatui::layout::Alignment::Center),
-                        Line::from(vec![
-                            Span::styled(
-                                " Ctrl + S ",
+                    // Draw Tab Headers
+                    let tab_headers = vec![
+                        Span::styled(
+                            if app.contact_form_tab == 0 {
+                                " 👤 [1] Name & Identität "
+                            } else {
+                                "  [1] Name & Identität  "
+                            },
+                            if app.contact_form_tab == 0 {
                                 Style::default()
-                                    .fg(Color::Green)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                            Span::raw(format!("{}   ", app.tr(TrKey::FormHintSave))),
-                            Span::styled(" Esc ", Style::default().fg(Color::Red)),
-                            Span::raw(app.tr(TrKey::FormHintCancel)),
-                        ])
-                        .alignment(ratatui::layout::Alignment::Center),
+                                    .fg(Color::Cyan)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(Color::DarkGray)
+                            },
+                        ),
+                        Span::raw(" │ "),
+                        Span::styled(
+                            if app.contact_form_tab == 1 {
+                                " 📅 [2] Details & Herkunft "
+                            } else {
+                                "  [2] Details & Herkunft  "
+                            },
+                            if app.contact_form_tab == 1 {
+                                Style::default()
+                                    .fg(Color::Cyan)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(Color::DarkGray)
+                            },
+                        ),
+                        Span::raw(" │ "),
+                        Span::styled(
+                            if app.contact_form_tab == 2 {
+                                " 🧬 [3] Physische Merkmale "
+                            } else {
+                                "  [3] Physische Merkmale  "
+                            },
+                            if app.contact_form_tab == 2 {
+                                Style::default()
+                                    .fg(Color::Cyan)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(Color::DarkGray)
+                            },
+                        ),
                     ];
-                    f.render_widget(Paragraph::new(hints), form_chunks[7]);
+                    let tabs_widget = Paragraph::new(Line::from(tab_headers)).block(
+                        Block::default()
+                            .borders(Borders::BOTTOM)
+                            .border_style(Style::default().fg(Color::DarkGray)),
+                    );
+                    f.render_widget(tabs_widget, layout_main[0]);
+
+                    let content_pane = layout_main[1];
+
+                    // Render active tab content
+                    match app.contact_form_tab {
+                        0 => {
+                            // TAB 0: Name & Identität
+                            let mut constraints = vec![
+                                Constraint::Length(3), // Title
+                            ];
+                            for _ in 0..app.contact_form_first_names.len() {
+                                constraints.push(Constraint::Length(3));
+                            }
+                            constraints.extend([
+                                Constraint::Length(3), // Last Name
+                                Constraint::Length(3), // Preferred Name
+                                Constraint::Length(3), // Maiden Name
+                                Constraint::Length(3), // Suffix
+                                Constraint::Min(0),    // Navigation instructions
+                            ]);
+
+                            let chunks = Layout::default()
+                                .direction(Direction::Vertical)
+                                .constraints(constraints)
+                                .split(content_pane);
+
+                            let mut current_idx = 0;
+
+                            // Title
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_title = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Titel / Prefix ");
+                            app.contact_form_title.set_block(block_title);
+                            app.contact_form_title
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_title, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // First names (dynamic list)
+                            for (i, textarea) in app.contact_form_first_names.iter_mut().enumerate()
+                            {
+                                let is_focused = app.active_field_index == current_idx;
+                                let title_str = if i == 0 {
+                                    " Rufname / Vorname ".to_string()
+                                } else {
+                                    format!(" Weiterer Vorname {} ", i + 1)
+                                };
+                                let block_fname = Block::default()
+                                    .borders(Borders::ALL)
+                                    .border_type(BorderType::Rounded)
+                                    .border_style(Style::default().fg(if is_focused {
+                                        Color::Cyan
+                                    } else {
+                                        Color::DarkGray
+                                    }))
+                                    .title(title_str);
+                                textarea.set_block(block_fname);
+                                textarea.set_cursor_line_style(Style::default());
+                                f.render_widget(&*textarea, chunks[current_idx]);
+                                current_idx += 1;
+                            }
+
+                            // Last Name
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_last = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Nachname ");
+                            app.contact_form_last_name.set_block(block_last);
+                            app.contact_form_last_name
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_last_name, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Preferred Name
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_pref = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Bevorzugter Name ");
+                            app.contact_form_preferred_name.set_block(block_pref);
+                            app.contact_form_preferred_name
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_preferred_name, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Maiden Name
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_maiden = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Geburtsname / Mädchenname ");
+                            app.contact_form_maiden_name.set_block(block_maiden);
+                            app.contact_form_maiden_name
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_maiden_name, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Suffix
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_suffix = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Namenszusatz / Suffix ");
+                            app.contact_form_suffix.set_block(block_suffix);
+                            app.contact_form_suffix
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_suffix, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Render hints
+                            let hints = vec![
+                                Line::from(vec![
+                                    Span::styled(" Tab/S-Tab: ", Style::default().fg(Color::Cyan)),
+                                    Span::raw("Navigate   "),
+                                    Span::styled(" Alt+1/2/3: ", Style::default().fg(Color::Cyan)),
+                                    Span::raw("Switch Tab   "),
+                                    Span::styled(
+                                        " Ctrl+S: ",
+                                        Style::default()
+                                            .fg(Color::Green)
+                                            .add_modifier(Modifier::BOLD),
+                                    ),
+                                    Span::raw("Save   "),
+                                    Span::styled(" Esc: ", Style::default().fg(Color::Red)),
+                                    Span::raw("Cancel"),
+                                ])
+                                .alignment(ratatui::layout::Alignment::Center),
+                            ];
+                            f.render_widget(Paragraph::new(hints), chunks[current_idx]);
+                        }
+                        1 => {
+                            // TAB 1: Details & Herkunft
+                            let mut constraints = vec![
+                                Constraint::Length(3), // Birthdate
+                                Constraint::Length(3), // Date of Death
+                                Constraint::Length(3), // Gender
+                                Constraint::Length(3), // Pronouns
+                            ];
+                            for _ in 0..app.contact_form_nationalities.len() {
+                                constraints.push(Constraint::Length(3));
+                            }
+                            for _ in 0..app.contact_form_languages.len() {
+                                constraints.push(Constraint::Length(3));
+                            }
+                            constraints.extend([
+                                Constraint::Length(3), // Marital Status
+                                Constraint::Length(3), // Religion
+                                Constraint::Min(0),    // Navigation instructions
+                            ]);
+
+                            let chunks = Layout::default()
+                                .direction(Direction::Vertical)
+                                .constraints(constraints)
+                                .split(content_pane);
+
+                            let mut current_idx = 0;
+
+                            // Birthdate
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_birth = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Geburtsdatum (YYYY-MM-DD) ");
+                            app.contact_form_birthdate.set_block(block_birth);
+                            app.contact_form_birthdate
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_birthdate, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Date of Death
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_death = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Sterbedatum (YYYY-MM-DD) (optional) ");
+                            app.contact_form_deathdate.set_block(block_death);
+                            app.contact_form_deathdate
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_deathdate, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Gender
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_gender = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Geschlecht / Gender ");
+                            app.contact_form_gender.set_block(block_gender);
+                            app.contact_form_gender
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_gender, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Pronouns
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_pronouns = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Pronomen (z.B. he/him) ");
+                            app.contact_form_pronouns.set_block(block_pronouns);
+                            app.contact_form_pronouns
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_pronouns, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Nationalities (dynamic list)
+                            for (i, textarea) in
+                                app.contact_form_nationalities.iter_mut().enumerate()
+                            {
+                                let is_focused = app.active_field_index == current_idx;
+                                let block_nat = Block::default()
+                                    .borders(Borders::ALL)
+                                    .border_type(BorderType::Rounded)
+                                    .border_style(Style::default().fg(if is_focused {
+                                        Color::Cyan
+                                    } else {
+                                        Color::DarkGray
+                                    }))
+                                    .title(format!(" Staatsangehörigkeit {} ", i + 1));
+                                textarea.set_block(block_nat);
+                                textarea.set_cursor_line_style(Style::default());
+                                f.render_widget(&*textarea, chunks[current_idx]);
+                                current_idx += 1;
+                            }
+
+                            // Languages (dynamic list)
+                            for (i, textarea) in app.contact_form_languages.iter_mut().enumerate() {
+                                let is_focused = app.active_field_index == current_idx;
+                                let block_lang = Block::default()
+                                    .borders(Borders::ALL)
+                                    .border_type(BorderType::Rounded)
+                                    .border_style(Style::default().fg(if is_focused {
+                                        Color::Cyan
+                                    } else {
+                                        Color::DarkGray
+                                    }))
+                                    .title(format!(" Gesprochene Sprache {} ", i + 1));
+                                textarea.set_block(block_lang);
+                                textarea.set_cursor_line_style(Style::default());
+                                f.render_widget(&*textarea, chunks[current_idx]);
+                                current_idx += 1;
+                            }
+
+                            // Marital Status (selector)
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_marital = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Familienstand ");
+                            let marital_val = crate::app::MARITAL_STATUS_OPTIONS
+                                [app.contact_form_marital_status_idx];
+                            let display_marital = if is_focused {
+                                format!("◀  {}  ▶", marital_val)
+                            } else {
+                                format!("   {}   ", marital_val)
+                            };
+                            let p_marital = Paragraph::new(Line::from(Span::styled(
+                                display_marital,
+                                Style::default().fg(Color::White),
+                            )))
+                            .block(block_marital);
+                            f.render_widget(p_marital, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Religion
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_religion = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Religion / Weltanschauung ");
+                            app.contact_form_religion.set_block(block_religion);
+                            app.contact_form_religion
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_religion, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Render hints
+                            let hints = vec![
+                                Line::from(vec![
+                                    Span::styled(" Tab/S-Tab: ", Style::default().fg(Color::Cyan)),
+                                    Span::raw("Navigate   "),
+                                    Span::styled(" Left/Right: ", Style::default().fg(Color::Cyan)),
+                                    Span::raw("Change Option   "),
+                                    Span::styled(" Alt+1/2/3: ", Style::default().fg(Color::Cyan)),
+                                    Span::raw("Switch Tab   "),
+                                    Span::styled(
+                                        " Ctrl+S: ",
+                                        Style::default()
+                                            .fg(Color::Green)
+                                            .add_modifier(Modifier::BOLD),
+                                    ),
+                                    Span::raw("Save"),
+                                ])
+                                .alignment(ratatui::layout::Alignment::Center),
+                            ];
+                            f.render_widget(Paragraph::new(hints), chunks[current_idx]);
+                        }
+                        2 => {
+                            // TAB 2: Physische Merkmale & Notizen
+                            let chunks = Layout::default()
+                                .direction(Direction::Vertical)
+                                .constraints([
+                                    Constraint::Length(3), // Blood Type (selector)
+                                    Constraint::Length(3), // Eye Color
+                                    Constraint::Length(3), // Hair Color
+                                    Constraint::Length(3), // Height
+                                    Constraint::Length(6), // Notes
+                                    Constraint::Min(0),    // Navigation instructions
+                                ])
+                                .split(content_pane);
+
+                            let mut current_idx = 0;
+
+                            // Blood Type (selector)
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_blood = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Blutgruppe ");
+                            let blood_val =
+                                crate::app::BLOOD_TYPE_OPTIONS[app.contact_form_blood_type_idx];
+                            let display_blood = if is_focused {
+                                format!("◀  {}  ▶", blood_val)
+                            } else {
+                                format!("   {}   ", blood_val)
+                            };
+                            let p_blood = Paragraph::new(Line::from(Span::styled(
+                                display_blood,
+                                Style::default().fg(Color::White),
+                            )))
+                            .block(block_blood);
+                            f.render_widget(p_blood, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Eye Color
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_eye = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Augenfarbe ");
+                            app.contact_form_eye_color.set_block(block_eye);
+                            app.contact_form_eye_color
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_eye_color, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Hair Color
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_hair = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Haarfarbe ");
+                            app.contact_form_hair_color.set_block(block_hair);
+                            app.contact_form_hair_color
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_hair_color, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Height
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_height = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Körpergröße (in cm) ");
+                            app.contact_form_height.set_block(block_height);
+                            app.contact_form_height
+                                .set_cursor_line_style(Style::default());
+                            f.render_widget(&app.contact_form_height, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Notes
+                            let is_focused = app.active_field_index == current_idx;
+                            let block_notes = Block::default()
+                                .borders(Borders::ALL)
+                                .border_type(BorderType::Rounded)
+                                .border_style(Style::default().fg(if is_focused {
+                                    Color::Cyan
+                                } else {
+                                    Color::DarkGray
+                                }))
+                                .title(" Notizen ");
+                            app.contact_form_notes.set_block(block_notes);
+                            app.contact_form_notes
+                                .set_cursor_line_style(Style::default().bg(Color::Indexed(235)));
+                            f.render_widget(&app.contact_form_notes, chunks[current_idx]);
+                            current_idx += 1;
+
+                            // Render hints
+                            let hints = vec![
+                                Line::from(vec![
+                                    Span::styled(" Tab/S-Tab: ", Style::default().fg(Color::Cyan)),
+                                    Span::raw("Navigate   "),
+                                    Span::styled(" Left/Right: ", Style::default().fg(Color::Cyan)),
+                                    Span::raw("Change Option   "),
+                                    Span::styled(" Alt+1/2/3: ", Style::default().fg(Color::Cyan)),
+                                    Span::raw("Switch Tab   "),
+                                    Span::styled(
+                                        " Ctrl+S: ",
+                                        Style::default()
+                                            .fg(Color::Green)
+                                            .add_modifier(Modifier::BOLD),
+                                    ),
+                                    Span::raw("Save"),
+                                ])
+                                .alignment(ratatui::layout::Alignment::Center),
+                            ];
+                            f.render_widget(Paragraph::new(hints), chunks[current_idx]);
+                        }
+                        _ => {}
+                    }
                 }
                 _ => {
                     if app.journal.contacts.is_empty() {
@@ -700,37 +1088,42 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                                 ),
                                 Style::default().fg(Color::DarkGray),
                             )),
-                            Line::from(vec![
-                                Span::styled("  First Name:  ", Style::default().fg(Color::Cyan)),
-                                Span::styled(
-                                    &contact.first_name,
-                                    Style::default().fg(Color::White),
-                                ),
-                            ]),
-                            Line::from(vec![
-                                Span::styled("  Middle Name: ", Style::default().fg(Color::Cyan)),
-                                Span::styled(
-                                    if contact.middle_name.is_empty() {
-                                        "-"
-                                    } else {
-                                        &contact.middle_name
-                                    },
-                                    Style::default().fg(Color::White),
-                                ),
-                            ]),
-                            Line::from(vec![
-                                Span::styled("  Last Name:   ", Style::default().fg(Color::Cyan)),
-                                Span::styled(&contact.last_name, Style::default().fg(Color::White)),
-                            ]),
-                            Line::from(vec![
-                                Span::styled("  Handle:      ", Style::default().fg(Color::Cyan)),
-                                Span::styled(
-                                    format!("@{}", contact.handle),
-                                    Style::default().fg(Color::White),
-                                ),
-                            ]),
                         ];
+                        let mut add_field = |label: &str, val: &str| {
+                            if !val.is_empty() {
+                                profile_text.push(Line::from(vec![
+                                    Span::styled(
+                                        format!("  {:<18}", label),
+                                        Style::default().fg(Color::Cyan),
+                                    ),
+                                    Span::styled(
+                                        val.to_string(),
+                                        Style::default().fg(Color::White),
+                                    ),
+                                ]));
+                            }
+                        };
 
+                        // 1. Names section
+                        add_field("Title:", &contact.title);
+                        if !contact.first_names.is_empty() {
+                            add_field("Given Names:", &contact.first_names.join(" "));
+                        } else {
+                            let mut legacy_firsts = Vec::new();
+                            if !contact.first_name.is_empty() {
+                                legacy_firsts.push(contact.first_name.clone());
+                            }
+                            if !contact.middle_name.is_empty() {
+                                legacy_firsts.push(contact.middle_name.clone());
+                            }
+                            add_field("Given Names:", &legacy_firsts.join(" "));
+                        }
+                        add_field("Last Name:", &contact.last_name);
+                        add_field("Preferred Name:", &contact.preferred_name);
+                        add_field("Maiden Name:", &contact.maiden_name);
+                        add_field("Suffix:", &contact.suffix);
+
+                        // 2. Personal Details section
                         if let Some(birth) = contact.birthdate {
                             let age_str = if let Some(age) = contact.calculate_age() {
                                 if contact.date_of_death.is_none() {
@@ -741,28 +1134,67 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             } else {
                                 "".to_string()
                             };
-                            profile_text.push(Line::from(vec![
-                                Span::styled("  Born:        ", Style::default().fg(Color::Cyan)),
-                                Span::styled(
-                                    format!("{}{}", Contact::format_date(birth), age_str),
-                                    Style::default().fg(Color::White),
-                                ),
-                            ]));
+                            add_field(
+                                "Born:",
+                                &format!("{}{}", Contact::format_date(birth), age_str),
+                            );
                         }
-
                         if let Some(death) = contact.date_of_death {
                             let age_str = if let Some(age) = contact.calculate_age() {
                                 format!(" (Aged: {})", age)
                             } else {
                                 "".to_string()
                             };
-                            profile_text.push(Line::from(vec![
-                                Span::styled("  Deceased:    ", Style::default().fg(Color::Cyan)),
-                                Span::styled(
-                                    format!("{}{}", Contact::format_date(death), age_str),
-                                    Style::default().fg(Color::White),
-                                ),
-                            ]));
+                            add_field(
+                                "Deceased:",
+                                &format!("{}{}", Contact::format_date(death), age_str),
+                            );
+                        }
+
+                        add_field("Gender:", &contact.gender);
+                        add_field("Pronouns:", &contact.pronouns);
+
+                        let nats_formatted: String = contact
+                            .nationalities
+                            .iter()
+                            .map(|nat| {
+                                if let Some(flag) = get_flag_emoji(nat) {
+                                    format!("{} {}", nat, flag)
+                                } else {
+                                    nat.clone()
+                                }
+                            })
+                            .collect::<Vec<String>>()
+                            .join(", ");
+                        add_field("Nationalities:", &nats_formatted);
+
+                        let langs_formatted: String = contact
+                            .languages
+                            .iter()
+                            .map(|lang| {
+                                if let Some(flag) = get_flag_emoji(lang) {
+                                    format!("{} {}", lang, flag)
+                                } else {
+                                    lang.clone()
+                                }
+                            })
+                            .collect::<Vec<String>>()
+                            .join(", ");
+                        add_field("Languages:", &langs_formatted);
+
+                        if contact.marital_status != "N/A" && !contact.marital_status.is_empty() {
+                            add_field("Marital Status:", &contact.marital_status);
+                        }
+                        add_field("Religion:", &contact.religion);
+
+                        // 3. Physical Attributes section
+                        if contact.blood_type != "N/A" && !contact.blood_type.is_empty() {
+                            add_field("Blood Type:", &contact.blood_type);
+                        }
+                        add_field("Eye Color:", &contact.eye_color);
+                        add_field("Hair Color:", &contact.hair_color);
+                        if let Some(h) = contact.height {
+                            add_field("Height:", &format!("{} cm", h));
                         }
 
                         profile_text.extend(vec![
@@ -2058,4 +2490,39 @@ fn draw_recovery_reset(f: &mut Frame, app: &mut App) {
     f.render_widget(&app.settings_password_new, inner_chunks[1]);
     f.render_widget(&app.settings_password_confirm, inner_chunks[2]);
     f.render_widget(footer_paragraph, inner_chunks[3]);
+}
+
+fn get_flag_emoji(name: &str) -> Option<&'static str> {
+    let name_lower = name.to_lowercase();
+    match name_lower.trim() {
+        "germany" | "deutschland" | "german" | "deutsch" | "de" | "deu" => Some("🇩🇪"),
+        "united states" | "usa" | "us" | "american" | "amerikanisch" => Some("🇺🇸"),
+        "united kingdom" | "uk" | "great britain" | "gb" | "english" | "englisch" | "british" => {
+            Some("🇬🇧")
+        }
+        "austria" | "österreich" | "at" | "aut" | "austrian" | "österreichisch" => Some("🇦🇹"),
+        "switzerland" | "schweiz" | "ch" | "che" | "swiss" | "schweizerisch" => Some("🇨🇭"),
+        "france" | "frankreich" | "fr" | "fra" | "french" | "französisch" => Some("🇫🇷"),
+        "italy" | "italien" | "it" | "ita" | "italian" | "italienisch" => Some("🇮🇹"),
+        "spain" | "spanien" | "es" | "esp" | "spanish" | "spanisch" => Some("🇪🇸"),
+        "canada" | "kanada" | "ca" | "can" | "canadian" => Some("🇨🇦"),
+        "japan" | "jp" | "jpn" | "japanese" | "japanisch" => Some("🇯🇵"),
+        "china" | "cn" | "chn" | "chinese" | "chinesisch" => Some("🇨🇳"),
+        "netherlands" | "niederlande" | "nl" | "nld" | "dutch" | "niederländisch" => Some("🇳🇱"),
+        "belgium" | "belgien" | "be" | "bel" | "belgian" => Some("🇧🇪"),
+        "sweden" | "schweden" | "se" | "swe" | "swedish" | "schwedisch" => Some("🇸🇪"),
+        "norway" | "norwegen" | "no" | "nor" | "norwegian" | "norwegisch" => Some("🇳🇴"),
+        "denmark" | "dänemark" | "dk" | "dnk" | "danish" | "dänisch" => Some("🇩🇰"),
+        "finland" | "finnland" | "fi" | "fin" | "finnish" | "finnisch" => Some("🇫🇮"),
+        "ireland" | "irland" | "ie" | "irl" | "irish" | "irisch" => Some("🇮🇪"),
+        "poland" | "polen" | "pl" | "pol" | "polish" | "polnisch" => Some("🇵🇱"),
+        "portugal" | "pt" | "prt" | "portuguese" | "portugiesisch" => Some("🇵🇹"),
+        "greece" | "griechenland" | "gr" | "grc" | "greek" | "griechisch" => Some("🇬🇷"),
+        "turkey" | "türkei" | "tr" | "tur" | "turkish" | "türkisch" => Some("🇹🇷"),
+        "russia" | "russland" | "ru" | "rus" | "russian" | "russisch" => Some("🇷🇺"),
+        "brazil" | "brasilien" | "br" | "bra" | "brazilian" => Some("🇧🇷"),
+        "australia" | "australien" | "au" | "aus" | "australian" => Some("🇦🇺"),
+        "india" | "indien" | "in" | "ind" | "hindi" | "indian" => Some("🇮🇳"),
+        _ => None,
+    }
 }

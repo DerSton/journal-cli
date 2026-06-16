@@ -15,14 +15,54 @@ pub struct JournalEntry {
     pub content: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Contact {
     pub id: String,
+
+    // Deprecated fields, kept for backward compatibility (deserialization)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub first_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub middle_name: String,
-    pub last_name: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub handle: String,
+
+    // New biographical fields
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub first_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub last_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub nickname: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub preferred_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub maiden_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub suffix: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub gender: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub pronouns: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nationalities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub languages: Vec<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub religion: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub marital_status: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub blood_type: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub eye_color: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub hair_color: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+
     #[serde(default)]
     pub notes: String,
     #[serde(default)]
@@ -35,6 +75,16 @@ impl Contact {
     /// Helper to format a NaiveDate.
     pub fn format_date(date: chrono::NaiveDate) -> String {
         date.format("%Y-%m-%d").to_string()
+    }
+
+    /// Migrates legacy first_name and middle_name fields to the first_names list.
+    pub fn migrate_names(&mut self) {
+        if self.first_names.is_empty() && !self.first_name.is_empty() {
+            self.first_names.push(self.first_name.clone());
+            if !self.middle_name.is_empty() {
+                self.first_names.push(self.middle_name.clone());
+            }
+        }
     }
 
     /// Calculates current age, or age at death if date_of_death is set.
@@ -55,37 +105,18 @@ impl Contact {
         }
         Some(age as u32)
     }
-    /// Returns the full name with a single space separating the non-empty fields.
+
+    /// Returns the full name formatted beautifully including title, preferred name, and maiden name.
     pub fn full_name(&self) -> String {
         let mut parts = Vec::new();
-        if !self.first_name.is_empty() {
-            parts.push(self.first_name.as_str());
+        if !self.title.is_empty() {
+            parts.push(self.title.clone());
         }
-        if !self.middle_name.is_empty() {
-            parts.push(self.middle_name.as_str());
-        }
-        if !self.last_name.is_empty() {
-            parts.push(self.last_name.as_str());
-        }
-        parts.join(" ")
-    }
-
-    /// Returns the name formatted for list displays (e.g. "Doe, John Middle").
-    /// Avoids leading commas and double spaces when fields are missing.
-    pub fn display_name(&self) -> String {
-        let mut parts = Vec::new();
-        if !self.last_name.is_empty() {
-            let mut first_mid = Vec::new();
-            if !self.first_name.is_empty() {
-                first_mid.push(self.first_name.as_str());
-            }
-            if !self.middle_name.is_empty() {
-                first_mid.push(self.middle_name.as_str());
-            }
-            if first_mid.is_empty() {
-                parts.push(self.last_name.clone());
-            } else {
-                parts.push(format!("{}, {}", self.last_name, first_mid.join(" ")));
+        if !self.first_names.is_empty() {
+            for name in &self.first_names {
+                if !name.is_empty() {
+                    parts.push(name.clone());
+                }
             }
         } else {
             if !self.first_name.is_empty() {
@@ -95,17 +126,80 @@ impl Contact {
                 parts.push(self.middle_name.clone());
             }
         }
+        if !self.preferred_name.is_empty() {
+            parts.push(format!("\"{}\"", self.preferred_name));
+        }
+        if !self.last_name.is_empty() {
+            parts.push(self.last_name.clone());
+        }
+        if !self.suffix.is_empty() {
+            parts.push(self.suffix.clone());
+        }
+        if !self.maiden_name.is_empty() {
+            parts.push(format!("(geb. {})", self.maiden_name));
+        }
         parts.join(" ")
     }
 
-    /// Returns the initials of the contact, up to 2 characters, without using '?' unless completely empty.
+    /// Returns the name formatted for list displays (e.g. "Doe, John Middle").
+    pub fn display_name(&self) -> String {
+        let mut parts = Vec::new();
+        if !self.last_name.is_empty() {
+            let mut first_mid = Vec::new();
+            if !self.first_names.is_empty() {
+                for name in &self.first_names {
+                    if !name.is_empty() {
+                        first_mid.push(name.as_str());
+                    }
+                }
+            } else {
+                if !self.first_name.is_empty() {
+                    first_mid.push(self.first_name.as_str());
+                }
+                if !self.middle_name.is_empty() {
+                    first_mid.push(self.middle_name.as_str());
+                }
+            }
+            if first_mid.is_empty() {
+                parts.push(self.last_name.clone());
+            } else {
+                parts.push(format!("{}, {}", self.last_name, first_mid.join(" ")));
+            }
+        } else {
+            if !self.first_names.is_empty() {
+                for name in &self.first_names {
+                    if !name.is_empty() {
+                        parts.push(name.clone());
+                    }
+                }
+            } else {
+                if !self.first_name.is_empty() {
+                    parts.push(self.first_name.clone());
+                }
+                if !self.middle_name.is_empty() {
+                    parts.push(self.middle_name.clone());
+                }
+            }
+        }
+        parts.join(" ")
+    }
+
+    /// Returns the initials of the contact, up to 2 characters.
     pub fn initials(&self) -> String {
         let mut initials = String::new();
-        if let Some(c) = self.first_name.chars().next() {
-            initials.push(c.to_uppercase().next().unwrap());
-        }
-        if let Some(c) = self.middle_name.chars().next() {
-            initials.push(c.to_uppercase().next().unwrap());
+        if !self.first_names.is_empty() {
+            for name in &self.first_names {
+                if let Some(c) = name.chars().next() {
+                    initials.push(c.to_uppercase().next().unwrap());
+                }
+            }
+        } else {
+            if let Some(c) = self.first_name.chars().next() {
+                initials.push(c.to_uppercase().next().unwrap());
+            }
+            if let Some(c) = self.middle_name.chars().next() {
+                initials.push(c.to_uppercase().next().unwrap());
+            }
         }
         if let Some(c) = self.last_name.chars().next() {
             initials.push(c.to_uppercase().next().unwrap());
@@ -113,10 +207,9 @@ impl Contact {
 
         if initials.is_empty() {
             "??".to_string()
-        } else if initials.len() > 2 {
-            let first_char = initials.chars().next().unwrap();
-            let last_char = initials.chars().nth(2).unwrap();
-            format!("{}{}", first_char, last_char)
+        } else if initials.chars().count() > 2 {
+            let chars_vec: Vec<char> = initials.chars().collect();
+            format!("{}{}", chars_vec[0], chars_vec[chars_vec.len() - 1])
         } else {
             initials
         }
@@ -204,8 +297,12 @@ impl Journal {
         let key = crypto::derive_key(password, &salt)?;
         let plaintext = crypto::decrypt(&key, &nonce, ciphertext)?;
 
-        let journal: Journal = serde_json::from_slice(&plaintext)
+        let mut journal: Journal = serde_json::from_slice(&plaintext)
             .map_err(|e| format!("Failed to deserialize journal JSON: {}", e))?;
+
+        for contact in &mut journal.contacts {
+            contact.migrate_names();
+        }
 
         Ok((journal, salt))
     }
@@ -296,6 +393,7 @@ mod tests {
             notes: "".to_string(),
             birthdate: Some(NaiveDate::from_ymd_opt(1990, 5, 15).unwrap()),
             date_of_death: None,
+            ..Default::default()
         };
 
         // If alive, age is calculated relative to now (non-deterministic, but we know it's at least 36 years if we are in 2026).
@@ -320,6 +418,51 @@ mod tests {
         assert_eq!(
             deserialized.date_of_death,
             Some(NaiveDate::from_ymd_opt(2026, 5, 14).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_contact_name_migration_and_formatting() {
+        let mut contact = Contact {
+            id: "123".to_string(),
+            first_name: "John".to_string(),
+            middle_name: "Edward".to_string(),
+            last_name: "Doe".to_string(),
+            title: "Dr.".to_string(),
+            preferred_name: "Johnny".to_string(),
+            suffix: "Jr.".to_string(),
+            maiden_name: "Smith".to_string(),
+            ..Default::default()
+        };
+
+        // Before migration, full_name uses legacy fields
+        assert_eq!(
+            contact.full_name(),
+            "Dr. John Edward \"Johnny\" Doe Jr. (geb. Smith)"
+        );
+
+        // Run migration
+        contact.migrate_names();
+        assert_eq!(
+            contact.first_names,
+            vec!["John".to_string(), "Edward".to_string()]
+        );
+
+        // After migration, first_name and middle_name are still legacy, but first_names takes precedence
+        assert_eq!(
+            contact.full_name(),
+            "Dr. John Edward \"Johnny\" Doe Jr. (geb. Smith)"
+        );
+
+        // If we modify first_names, it takes precedence
+        contact.first_names = vec![
+            "John".to_string(),
+            "Edward".to_string(),
+            "William".to_string(),
+        ];
+        assert_eq!(
+            contact.full_name(),
+            "Dr. John Edward William \"Johnny\" Doe Jr. (geb. Smith)"
         );
     }
 }

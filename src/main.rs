@@ -200,16 +200,7 @@ where
                                     app.mode = AppMode::Writing { is_edit: false };
                                 }
                                 Tab::Contacts => {
-                                    app.contact_first_name = ratatui_textarea::TextArea::default();
-                                    app.contact_middle_name = ratatui_textarea::TextArea::default();
-                                    app.contact_last_name = ratatui_textarea::TextArea::default();
-                                    app.contact_handle = ratatui_textarea::TextArea::default();
-                                    app.contact_birthdate = None;
-                                    app.contact_deathdate = None;
-                                    app.contact_notes = ratatui_textarea::TextArea::default();
-                                    app.active_field_index = 0;
-                                    app.handle_edited = false;
-                                    app.mode = AppMode::Writing { is_edit: false };
+                                    app.init_contact_form(false);
                                 }
                                 Tab::Settings => {}
                             }
@@ -234,30 +225,7 @@ where
                                     if key.code == KeyCode::Char('e')
                                         && !app.journal.contacts.is_empty()
                                     {
-                                        let contact = &app.journal.contacts[app.selected_index];
-                                        app.contact_first_name =
-                                            ratatui_textarea::TextArea::new(vec![
-                                                contact.first_name.clone(),
-                                            ]);
-                                        app.contact_middle_name =
-                                            ratatui_textarea::TextArea::new(vec![
-                                                contact.middle_name.clone(),
-                                            ]);
-                                        app.contact_last_name =
-                                            ratatui_textarea::TextArea::new(vec![
-                                                contact.last_name.clone(),
-                                            ]);
-                                        app.contact_handle = ratatui_textarea::TextArea::new(vec![
-                                            contact.handle.clone(),
-                                        ]);
-                                        app.contact_birthdate = contact.birthdate;
-                                        app.contact_deathdate = contact.date_of_death;
-                                        app.contact_notes = ratatui_textarea::TextArea::new(
-                                            contact.notes.lines().map(String::from).collect(),
-                                        );
-                                        app.active_field_index = 0;
-                                        app.handle_edited = true;
-                                        app.mode = AppMode::Writing { is_edit: true };
+                                        app.init_contact_form(true);
                                     }
                                 }
                                 Tab::Settings => match app.selected_index {
@@ -303,289 +271,390 @@ where
                         }
                         _ => {}
                     },
-                    AppMode::Writing { is_edit } => {
-                        match app.active_tab {
-                            Tab::Journal => {
-                                if key.code == KeyCode::Char('p')
-                                    && key.modifiers.contains(KeyModifiers::ALT)
-                                {
-                                    if !app.journal.contacts.is_empty() {
-                                        app.mode = AppMode::ContactPicker {
-                                            is_edit,
-                                            selected_contact_index: 0,
-                                        };
-                                    }
-                                } else if key.code == KeyCode::Char('s')
-                                    && key.modifiers.contains(KeyModifiers::CONTROL)
-                                {
-                                    app.handle_save_entry();
-                                } else if key.code == KeyCode::Esc {
-                                    app.mode = AppMode::List;
-                                } else {
-                                    app.textarea.input(key);
+                    AppMode::Writing { is_edit } => match app.active_tab {
+                        Tab::Journal => {
+                            if key.code == KeyCode::Char('p')
+                                && key.modifiers.contains(KeyModifiers::ALT)
+                            {
+                                if !app.journal.contacts.is_empty() {
+                                    app.mode = AppMode::ContactPicker {
+                                        is_edit,
+                                        selected_contact_index: 0,
+                                    };
                                 }
+                            } else if key.code == KeyCode::Char('s')
+                                && key.modifiers.contains(KeyModifiers::CONTROL)
+                            {
+                                app.handle_save_entry();
+                            } else if key.code == KeyCode::Esc {
+                                app.mode = AppMode::List;
+                            } else {
+                                app.textarea.input(key);
                             }
-                            Tab::Contacts => {
-                                if key.code == KeyCode::Char('s')
-                                    && key.modifiers.contains(KeyModifiers::CONTROL)
-                                {
-                                    app.handle_save_contact();
-                                } else if key.code == KeyCode::Esc {
-                                    app.mode = AppMode::List;
-                                } else if key.code == KeyCode::Tab || key.code == KeyCode::Down {
-                                    app.active_field_index = (app.active_field_index + 1) % 7;
-                                } else if key.code == KeyCode::BackTab || key.code == KeyCode::Up {
+                        }
+                        Tab::Contacts => {
+                            if key.code == KeyCode::Char('s')
+                                && key.modifiers.contains(KeyModifiers::CONTROL)
+                            {
+                                app.handle_save_contact();
+                            } else if key.code == KeyCode::Esc {
+                                app.mode = AppMode::List;
+                            } else if key.code == KeyCode::Left
+                                && key.modifiers.contains(KeyModifiers::CONTROL)
+                            {
+                                app.contact_form_tab = if app.contact_form_tab == 0 {
+                                    2
+                                } else {
+                                    app.contact_form_tab - 1
+                                };
+                                app.active_field_index = 0;
+                            } else if key.code == KeyCode::Right
+                                && key.modifiers.contains(KeyModifiers::CONTROL)
+                            {
+                                app.contact_form_tab = (app.contact_form_tab + 1) % 3;
+                                app.active_field_index = 0;
+                            } else if key.modifiers.contains(KeyModifiers::ALT)
+                                && (key.code == KeyCode::Char('1')
+                                    || key.code == KeyCode::Char('2')
+                                    || key.code == KeyCode::Char('3'))
+                            {
+                                match key.code {
+                                    KeyCode::Char('1') => {
+                                        app.contact_form_tab = 0;
+                                        app.active_field_index = 0;
+                                    }
+                                    KeyCode::Char('2') => {
+                                        app.contact_form_tab = 1;
+                                        app.active_field_index = 0;
+                                    }
+                                    KeyCode::Char('3') => {
+                                        app.contact_form_tab = 2;
+                                        app.active_field_index = 0;
+                                    }
+                                    _ => {}
+                                }
+                            } else if key.code == KeyCode::Tab || key.code == KeyCode::Down {
+                                let num_fields = app.contact_form_num_fields();
+                                if num_fields > 0 {
+                                    app.active_field_index =
+                                        (app.active_field_index + 1) % num_fields;
+                                }
+                            } else if key.code == KeyCode::BackTab || key.code == KeyCode::Up {
+                                let num_fields = app.contact_form_num_fields();
+                                if num_fields > 0 {
                                     app.active_field_index = if app.active_field_index == 0 {
-                                        6
+                                        num_fields - 1
                                     } else {
                                         app.active_field_index - 1
                                     };
-                                } else {
-                                    let mut input_made = false;
-                                    match app.active_field_index {
-                                        0 => {
-                                            app.contact_first_name.input(key);
-                                            input_made = true;
-                                        }
-                                        1 => {
-                                            app.contact_middle_name.input(key);
-                                        }
-                                        2 => {
-                                            app.contact_last_name.input(key);
-                                            input_made = true;
-                                        }
-                                        3 => {
-                                            app.contact_handle.input(key);
-                                            app.handle_edited = true;
-                                        }
-                                        4 | 5 => {
-                                            if key.code == KeyCode::Enter {
-                                                let current_val = if app.active_field_index == 4 {
-                                                    app.contact_birthdate
-                                                } else {
-                                                    app.contact_deathdate
-                                                };
-                                                let start_date = current_val.unwrap_or_else(|| {
-                                                    chrono::Local::now().date_naive()
-                                                });
-                                                app.mode = AppMode::DatePicker {
-                                                    is_edit,
-                                                    field_index: app.active_field_index,
-                                                    current_date: start_date,
-                                                };
-                                            } else if key.code == KeyCode::Backspace
-                                                || key.code == KeyCode::Delete
-                                            {
-                                                if app.active_field_index == 4 {
-                                                    app.contact_birthdate = None;
-                                                } else {
-                                                    app.contact_deathdate = None;
+                                }
+                            } else {
+                                match app.contact_form_tab {
+                                    0 => {
+                                        let f_names_len = app.contact_form_first_names.len();
+                                        if app.active_field_index == 0 {
+                                            app.contact_form_title.input(key);
+                                        } else if app.active_field_index >= 1
+                                            && app.active_field_index < 1 + f_names_len
+                                        {
+                                            let idx = app.active_field_index - 1;
+                                            app.contact_form_first_names[idx].input(key);
+                                            if idx == f_names_len - 1 {
+                                                let content = app.contact_form_first_names[idx]
+                                                    .lines()
+                                                    .join("");
+                                                if !content.trim().is_empty() {
+                                                    app.contact_form_first_names.push(ratatui_textarea::TextArea::default());
                                                 }
                                             }
+                                        } else if app.active_field_index == 1 + f_names_len {
+                                            app.contact_form_last_name.input(key);
+                                        } else if app.active_field_index == 2 + f_names_len {
+                                            app.contact_form_preferred_name.input(key);
+                                        } else if app.active_field_index == 3 + f_names_len {
+                                            app.contact_form_maiden_name.input(key);
+                                        } else if app.active_field_index == 4 + f_names_len {
+                                            app.contact_form_suffix.input(key);
                                         }
-                                        6 => {
-                                            app.contact_notes.input(key);
+                                    }
+                                    1 => {
+                                        let nats_len = app.contact_form_nationalities.len();
+                                        let langs_len = app.contact_form_languages.len();
+                                        let start_lang = 4 + nats_len;
+                                        let idx_marital = start_lang + langs_len;
+
+                                        if app.active_field_index == 0 {
+                                            if key.code == KeyCode::Enter {
+                                                let val_str =
+                                                    app.contact_form_birthdate.lines().join("");
+                                                let parsed_date =
+                                                    chrono::NaiveDate::parse_from_str(
+                                                        val_str.trim(),
+                                                        "%Y-%m-%d",
+                                                    )
+                                                    .unwrap_or_else(|_| {
+                                                        chrono::Local::now().date_naive()
+                                                    });
+                                                app.mode = AppMode::DatePicker {
+                                                    is_edit,
+                                                    field_index: 0,
+                                                    current_date: parsed_date,
+                                                };
+                                            } else {
+                                                app.contact_form_birthdate.input(key);
+                                            }
+                                        } else if app.active_field_index == 1 {
+                                            if key.code == KeyCode::Enter {
+                                                let val_str =
+                                                    app.contact_form_deathdate.lines().join("");
+                                                let parsed_date =
+                                                    chrono::NaiveDate::parse_from_str(
+                                                        val_str.trim(),
+                                                        "%Y-%m-%d",
+                                                    )
+                                                    .unwrap_or_else(|_| {
+                                                        chrono::Local::now().date_naive()
+                                                    });
+                                                app.mode = AppMode::DatePicker {
+                                                    is_edit,
+                                                    field_index: 1,
+                                                    current_date: parsed_date,
+                                                };
+                                            } else {
+                                                app.contact_form_deathdate.input(key);
+                                            }
+                                        } else if app.active_field_index == 2 {
+                                            app.contact_form_gender.input(key);
+                                        } else if app.active_field_index == 3 {
+                                            app.contact_form_pronouns.input(key);
+                                        } else if app.active_field_index >= 4
+                                            && app.active_field_index < 4 + nats_len
+                                        {
+                                            let idx = app.active_field_index - 4;
+                                            app.contact_form_nationalities[idx].input(key);
+                                            if idx == nats_len - 1 {
+                                                let content = app.contact_form_nationalities[idx]
+                                                    .lines()
+                                                    .join("");
+                                                if !content.trim().is_empty() {
+                                                    app.contact_form_nationalities.push(ratatui_textarea::TextArea::default());
+                                                }
+                                            }
+                                        } else if app.active_field_index >= start_lang
+                                            && app.active_field_index < start_lang + langs_len
+                                        {
+                                            let idx = app.active_field_index - start_lang;
+                                            app.contact_form_languages[idx].input(key);
+                                            if idx == langs_len - 1 {
+                                                let content = app.contact_form_languages[idx]
+                                                    .lines()
+                                                    .join("");
+                                                if !content.trim().is_empty() {
+                                                    app.contact_form_languages.push(ratatui_textarea::TextArea::default());
+                                                }
+                                            }
+                                        } else if app.active_field_index == idx_marital {
+                                            if key.code == KeyCode::Left {
+                                                app.contact_form_marital_status_idx =
+                                                    if app.contact_form_marital_status_idx == 0 {
+                                                        crate::app::MARITAL_STATUS_OPTIONS.len() - 1
+                                                    } else {
+                                                        app.contact_form_marital_status_idx - 1
+                                                    };
+                                            } else if key.code == KeyCode::Right {
+                                                app.contact_form_marital_status_idx =
+                                                    (app.contact_form_marital_status_idx + 1)
+                                                        % crate::app::MARITAL_STATUS_OPTIONS.len();
+                                            }
+                                        } else if app.active_field_index == idx_marital + 1 {
+                                            app.contact_form_religion.input(key);
+                                        }
+                                    }
+                                    2 => {
+                                        if app.active_field_index == 0 {
+                                            if key.code == KeyCode::Left {
+                                                app.contact_form_blood_type_idx =
+                                                    if app.contact_form_blood_type_idx == 0 {
+                                                        crate::app::BLOOD_TYPE_OPTIONS.len() - 1
+                                                    } else {
+                                                        app.contact_form_blood_type_idx - 1
+                                                    };
+                                            } else if key.code == KeyCode::Right {
+                                                app.contact_form_blood_type_idx =
+                                                    (app.contact_form_blood_type_idx + 1)
+                                                        % crate::app::BLOOD_TYPE_OPTIONS.len();
+                                            }
+                                        } else if app.active_field_index == 1 {
+                                            app.contact_form_eye_color.input(key);
+                                        } else if app.active_field_index == 2 {
+                                            app.contact_form_hair_color.input(key);
+                                        } else if app.active_field_index == 3 {
+                                            app.contact_form_height.input(key);
+                                        } else if app.active_field_index == 4 {
+                                            app.contact_form_notes.input(key);
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        Tab::Settings => match app.selected_index {
+                            0 => {
+                                if key.code == KeyCode::Esc {
+                                    app.mode = AppMode::List;
+                                } else if key.code == KeyCode::Char('s')
+                                    && key.modifiers.contains(KeyModifiers::CONTROL)
+                                {
+                                    match app.handle_change_password() {
+                                        Ok(_) => {
+                                            app.status_msg = Some(
+                                                "Password changed and database re-encrypted"
+                                                    .to_string(),
+                                            );
+                                            app.error_msg = None;
+                                            app.mode = AppMode::List;
+                                        }
+                                        Err(e) => {
+                                            app.error_msg = Some(e);
+                                        }
+                                    }
+                                } else if key.code == KeyCode::Tab || key.code == KeyCode::Down {
+                                    app.settings_active_field = (app.settings_active_field + 1) % 2;
+                                } else if key.code == KeyCode::BackTab || key.code == KeyCode::Up {
+                                    app.settings_active_field =
+                                        if app.settings_active_field == 0 { 1 } else { 0 };
+                                } else {
+                                    match app.settings_active_field {
+                                        0 => {
+                                            app.settings_password_new.input(key);
+                                        }
+                                        1 => {
+                                            app.settings_password_confirm.input(key);
                                         }
                                         _ => {}
-                                    };
-
-                                    // Auto-generate handle from first + last name unless manually customized
-                                    if input_made
-                                        && !app.handle_edited
-                                        && let AppMode::Writing { is_edit: false } = app.mode
-                                    {
-                                        let first = app
-                                            .contact_first_name
-                                            .lines()
-                                            .join("")
-                                            .trim()
-                                            .to_lowercase()
-                                            .replace(' ', "");
-                                        let last = app
-                                            .contact_last_name
-                                            .lines()
-                                            .join("")
-                                            .trim()
-                                            .to_lowercase()
-                                            .replace(' ', "");
-                                        let auto_handle = format!("{}{}", first, last);
-                                        app.contact_handle =
-                                            ratatui_textarea::TextArea::new(vec![auto_handle]);
                                     }
                                 }
                             }
-                            Tab::Settings => match app.selected_index {
-                                0 => {
-                                    if key.code == KeyCode::Esc {
+                            1 => match key.code {
+                                KeyCode::Left
+                                | KeyCode::Char('h')
+                                | KeyCode::Down
+                                | KeyCode::Char('j') => {
+                                    app.temp_timeout_mins = app.temp_timeout_mins.saturating_sub(1);
+                                }
+                                KeyCode::Right
+                                | KeyCode::Char('l')
+                                | KeyCode::Up
+                                | KeyCode::Char('k') => {
+                                    app.temp_timeout_mins = app.temp_timeout_mins.saturating_add(1);
+                                }
+                                KeyCode::Esc => {
+                                    app.mode = AppMode::List;
+                                }
+                                KeyCode::Char('s')
+                                    if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                                {
+                                    app.journal.settings.autolock_timeout_mins =
+                                        app.temp_timeout_mins;
+                                    if let Err(e) = app.save_settings() {
+                                        app.error_msg = Some(format!("Save failed: {}", e));
+                                    } else {
+                                        app.status_msg =
+                                            Some("Inactivity timeout updated".to_string());
                                         app.mode = AppMode::List;
-                                    } else if key.code == KeyCode::Char('s')
-                                        && key.modifiers.contains(KeyModifiers::CONTROL)
-                                    {
-                                        match app.handle_change_password() {
-                                            Ok(_) => {
-                                                app.status_msg = Some(
-                                                    "Password changed and database re-encrypted"
-                                                        .to_string(),
-                                                );
-                                                app.error_msg = None;
-                                                app.mode = AppMode::List;
-                                            }
-                                            Err(e) => {
-                                                app.error_msg = Some(e);
+                                    }
+                                }
+                                _ => {}
+                            },
+                            2 => match key.code {
+                                KeyCode::Left
+                                | KeyCode::Right
+                                | KeyCode::Char('h')
+                                | KeyCode::Char('l')
+                                | KeyCode::Char(' ')
+                                | KeyCode::Up
+                                | KeyCode::Down
+                                | KeyCode::Char('j')
+                                | KeyCode::Char('k') => {
+                                    app.temp_lock_on_suspend = !app.temp_lock_on_suspend;
+                                }
+                                KeyCode::Esc => {
+                                    app.mode = AppMode::List;
+                                }
+                                KeyCode::Char('s')
+                                    if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                                {
+                                    app.journal.settings.lock_on_suspend = app.temp_lock_on_suspend;
+                                    if let Err(e) = app.save_settings() {
+                                        app.error_msg = Some(format!("Save failed: {}", e));
+                                    } else {
+                                        app.status_msg =
+                                            Some("PC lock settings updated".to_string());
+                                        app.mode = AppMode::List;
+                                    }
+                                }
+                                _ => {}
+                            },
+                            3 => match key.code {
+                                KeyCode::Up | KeyCode::Down | KeyCode::Tab | KeyCode::BackTab => {
+                                    app.settings_active_field =
+                                        if app.settings_active_field == 0 { 1 } else { 0 };
+                                }
+                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('j') => {
+                                    if app.settings_active_field == 0 {
+                                        if app.settings_num_shares > 1 {
+                                            app.settings_num_shares -= 1;
+                                            if app.settings_threshold > app.settings_num_shares {
+                                                app.settings_threshold = app.settings_num_shares;
                                             }
                                         }
-                                    } else if key.code == KeyCode::Tab || key.code == KeyCode::Down
-                                    {
-                                        app.settings_active_field =
-                                            (app.settings_active_field + 1) % 2;
-                                    } else if key.code == KeyCode::BackTab
-                                        || key.code == KeyCode::Up
-                                    {
-                                        app.settings_active_field =
-                                            if app.settings_active_field == 0 { 1 } else { 0 };
                                     } else {
-                                        match app.settings_active_field {
-                                            0 => {
-                                                app.settings_password_new.input(key);
-                                            }
-                                            1 => {
-                                                app.settings_password_confirm.input(key);
-                                            }
-                                            _ => {}
+                                        if app.settings_threshold > 1 {
+                                            app.settings_threshold -= 1;
                                         }
                                     }
                                 }
-                                1 => match key.code {
-                                    KeyCode::Left
-                                    | KeyCode::Char('h')
-                                    | KeyCode::Down
-                                    | KeyCode::Char('j') => {
-                                        app.temp_timeout_mins =
-                                            app.temp_timeout_mins.saturating_sub(1);
+                                KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('k') => {
+                                    if app.settings_active_field == 0 {
+                                        if app.settings_num_shares < 255 {
+                                            app.settings_num_shares += 1;
+                                        }
+                                    } else {
+                                        if app.settings_threshold < app.settings_num_shares {
+                                            app.settings_threshold += 1;
+                                        }
                                     }
-                                    KeyCode::Right
-                                    | KeyCode::Char('l')
-                                    | KeyCode::Up
-                                    | KeyCode::Char('k') => {
-                                        app.temp_timeout_mins =
-                                            app.temp_timeout_mins.saturating_add(1);
-                                    }
-                                    KeyCode::Esc => {
-                                        app.mode = AppMode::List;
-                                    }
-                                    KeyCode::Char('s')
-                                        if key.modifiers.contains(KeyModifiers::CONTROL) =>
-                                    {
-                                        app.journal.settings.autolock_timeout_mins =
-                                            app.temp_timeout_mins;
-                                        if let Err(e) = app.save_settings() {
-                                            app.error_msg = Some(format!("Save failed: {}", e));
-                                        } else {
-                                            app.status_msg =
-                                                Some("Inactivity timeout updated".to_string());
+                                }
+                                KeyCode::Esc => {
+                                    app.mode = AppMode::List;
+                                }
+                                KeyCode::Char('s')
+                                    if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                                {
+                                    match crate::crypto::split_password(
+                                        &app.password,
+                                        app.settings_threshold,
+                                        app.settings_num_shares,
+                                    ) {
+                                        Ok(shares) => {
+                                            app.generated_shares = shares;
+                                            app.status_msg = Some(
+                                                "Recovery shares generated successfully!"
+                                                    .to_string(),
+                                            );
                                             app.mode = AppMode::List;
                                         }
-                                    }
-                                    _ => {}
-                                },
-                                2 => match key.code {
-                                    KeyCode::Left
-                                    | KeyCode::Right
-                                    | KeyCode::Char('h')
-                                    | KeyCode::Char('l')
-                                    | KeyCode::Char(' ')
-                                    | KeyCode::Up
-                                    | KeyCode::Down
-                                    | KeyCode::Char('j')
-                                    | KeyCode::Char('k') => {
-                                        app.temp_lock_on_suspend = !app.temp_lock_on_suspend;
-                                    }
-                                    KeyCode::Esc => {
-                                        app.mode = AppMode::List;
-                                    }
-                                    KeyCode::Char('s')
-                                        if key.modifiers.contains(KeyModifiers::CONTROL) =>
-                                    {
-                                        app.journal.settings.lock_on_suspend =
-                                            app.temp_lock_on_suspend;
-                                        if let Err(e) = app.save_settings() {
-                                            app.error_msg = Some(format!("Save failed: {}", e));
-                                        } else {
-                                            app.status_msg =
-                                                Some("PC lock settings updated".to_string());
-                                            app.mode = AppMode::List;
+                                        Err(e) => {
+                                            app.error_msg =
+                                                Some(format!("Failed to generate shares: {}", e));
                                         }
                                     }
-                                    _ => {}
-                                },
-                                3 => match key.code {
-                                    KeyCode::Up
-                                    | KeyCode::Down
-                                    | KeyCode::Tab
-                                    | KeyCode::BackTab => {
-                                        app.settings_active_field =
-                                            if app.settings_active_field == 0 { 1 } else { 0 };
-                                    }
-                                    KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('j') => {
-                                        if app.settings_active_field == 0 {
-                                            if app.settings_num_shares > 1 {
-                                                app.settings_num_shares -= 1;
-                                                if app.settings_threshold > app.settings_num_shares
-                                                {
-                                                    app.settings_threshold =
-                                                        app.settings_num_shares;
-                                                }
-                                            }
-                                        } else {
-                                            if app.settings_threshold > 1 {
-                                                app.settings_threshold -= 1;
-                                            }
-                                        }
-                                    }
-                                    KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('k') => {
-                                        if app.settings_active_field == 0 {
-                                            if app.settings_num_shares < 255 {
-                                                app.settings_num_shares += 1;
-                                            }
-                                        } else {
-                                            if app.settings_threshold < app.settings_num_shares {
-                                                app.settings_threshold += 1;
-                                            }
-                                        }
-                                    }
-                                    KeyCode::Esc => {
-                                        app.mode = AppMode::List;
-                                    }
-                                    KeyCode::Char('s')
-                                        if key.modifiers.contains(KeyModifiers::CONTROL) =>
-                                    {
-                                        match crate::crypto::split_password(
-                                            &app.password,
-                                            app.settings_threshold,
-                                            app.settings_num_shares,
-                                        ) {
-                                            Ok(shares) => {
-                                                app.generated_shares = shares;
-                                                app.status_msg = Some(
-                                                    "Recovery shares generated successfully!"
-                                                        .to_string(),
-                                                );
-                                                app.mode = AppMode::List;
-                                            }
-                                            Err(e) => {
-                                                app.error_msg = Some(format!(
-                                                    "Failed to generate shares: {}",
-                                                    e
-                                                ));
-                                            }
-                                        }
-                                    }
-                                    _ => {}
-                                },
+                                }
                                 _ => {}
                             },
-                        }
-                    }
+                            _ => {}
+                        },
+                    },
 
                     AppMode::ContactPicker {
                         is_edit,
@@ -621,9 +690,8 @@ where
                         KeyCode::Enter => {
                             let len = app.journal.contacts.len();
                             if len > 0 && selected_contact_index < len {
-                                let handle = &app.journal.contacts[selected_contact_index].handle;
-                                app.textarea
-                                    .insert_str(format!("{{{{person|{}}}}}", handle));
+                                let id = &app.journal.contacts[selected_contact_index].id;
+                                app.textarea.insert_str(format!("{{{{person|{}}}}}", id));
                             }
                             app.mode = AppMode::Writing { is_edit };
                         }
@@ -638,18 +706,21 @@ where
                             app.mode = AppMode::Writing { is_edit };
                         }
                         KeyCode::Char('c') | KeyCode::Char('C') => {
-                            if field_index == 4 {
-                                app.contact_birthdate = None;
+                            if field_index == 0 {
+                                app.contact_form_birthdate = ratatui_textarea::TextArea::default();
                             } else {
-                                app.contact_deathdate = None;
+                                app.contact_form_deathdate = ratatui_textarea::TextArea::default();
                             }
                             app.mode = AppMode::Writing { is_edit };
                         }
                         KeyCode::Enter => {
-                            if field_index == 4 {
-                                app.contact_birthdate = Some(current_date);
+                            let formatted = current_date.format("%Y-%m-%d").to_string();
+                            if field_index == 0 {
+                                app.contact_form_birthdate =
+                                    ratatui_textarea::TextArea::new(vec![formatted]);
                             } else {
-                                app.contact_deathdate = Some(current_date);
+                                app.contact_form_deathdate =
+                                    ratatui_textarea::TextArea::new(vec![formatted]);
                             }
                             app.mode = AppMode::Writing { is_edit };
                         }
