@@ -123,8 +123,30 @@ impl Contact {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct Settings {}
+fn default_autolock_timeout() -> u32 {
+    5
+}
+
+fn default_lock_on_suspend() -> bool {
+    true
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Settings {
+    #[serde(default = "default_autolock_timeout")]
+    pub autolock_timeout_mins: u32,
+    #[serde(default = "default_lock_on_suspend")]
+    pub lock_on_suspend: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            autolock_timeout_mins: 5,
+            lock_on_suspend: true,
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Journal {
@@ -244,8 +266,10 @@ mod tests {
     fn test_settings_serialization_defaults() {
         let json_str = r#"{"entries": []}"#;
         let journal: Journal = serde_json::from_str(json_str).unwrap();
-        // Just verify it deserializes correctly
+        // Verify it deserializes correctly with defaults
         assert!(journal.entries.is_empty());
+        assert_eq!(journal.settings.autolock_timeout_mins, 5);
+        assert!(journal.settings.lock_on_suspend);
     }
 
     #[test]

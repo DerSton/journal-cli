@@ -533,10 +533,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         .title(app.tr(TrKey::FormBirthdateTitle));
                     let birth_val = match app.contact_birthdate {
                         Some(d) => Span::styled(
-                            format!(
-                                " 📅 {}",
-                                Contact::format_date(d)
-                            ),
+                            format!(" 📅 {}", Contact::format_date(d)),
                             Style::default().fg(Color::White),
                         ),
                         None => Span::styled(
@@ -558,10 +555,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         .title(app.tr(TrKey::FormDeathdateTitle));
                     let death_val = match app.contact_deathdate {
                         Some(d) => Span::styled(
-                            format!(
-                                " 📅 {}",
-                                Contact::format_date(d)
-                            ),
+                            format!(" 📅 {}", Contact::format_date(d)),
                             Style::default().fg(Color::White),
                         ),
                         None => Span::styled(
@@ -737,11 +731,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             profile_text.push(Line::from(vec![
                                 Span::styled("  Born:        ", Style::default().fg(Color::Cyan)),
                                 Span::styled(
-                                    format!(
-                                        "{}{}",
-                                        Contact::format_date(birth),
-                                        age_str
-                                    ),
+                                    format!("{}{}", Contact::format_date(birth), age_str),
                                     Style::default().fg(Color::White),
                                 ),
                             ]));
@@ -756,11 +746,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             profile_text.push(Line::from(vec![
                                 Span::styled("  Deceased:    ", Style::default().fg(Color::Cyan)),
                                 Span::styled(
-                                    format!(
-                                        "{}{}",
-                                        Contact::format_date(death),
-                                        age_str
-                                    ),
+                                    format!("{}{}", Contact::format_date(death), age_str),
                                     Style::default().fg(Color::White),
                                 ),
                             ]));
@@ -854,8 +840,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         }
         Tab::Settings => {
             // --- DRAW SETTINGS LIST (Left Pane) ---
-            let settings_groups = vec![
+            let settings_groups = [
                 "🔑  Change Password",
+                "⏱️  Inactivity Timeout",
+                "🔒  Lock on PC Lock",
             ];
 
             let list_items: Vec<ListItem> = settings_groups
@@ -898,10 +886,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             match app.selected_index {
                 0 => {
                     // CHANGE PASSWORD EDITOR
-                    let is_editing_password = match app.mode {
-                        AppMode::Writing { .. } => true,
-                        _ => false,
-                    };
+                    let is_editing_password = matches!(app.mode, AppMode::Writing { .. });
 
                     let frame_block = Block::default()
                         .borders(Borders::ALL)
@@ -1023,6 +1008,178 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     }
 
                     f.render_widget(Paragraph::new(instructions), form_chunks[2]);
+                }
+                1 => {
+                    let is_editing = matches!(app.mode, AppMode::Writing { .. });
+
+                    let frame_block = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(if is_editing {
+                            Color::Cyan
+                        } else {
+                            Color::DarkGray
+                        }))
+                        .title(Span::styled(
+                            " Inactivity Autolock ",
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+
+                    let inner_area = content_area.inner(ratatui::layout::Margin {
+                        horizontal: 2,
+                        vertical: 2,
+                    });
+
+                    let timeout_val = if is_editing {
+                        app.temp_timeout_mins
+                    } else {
+                        app.journal.settings.autolock_timeout_mins
+                    };
+
+                    let timeout_str = if timeout_val == 0 {
+                        "Disabled".to_string()
+                    } else {
+                        format!("{} minutes", timeout_val)
+                    };
+
+                    let mut details = vec![
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::styled(
+                                "Inactivity Timeout: ",
+                                Style::default().fg(Color::DarkGray),
+                            ),
+                            Span::styled(
+                                format!(" < {} > ", timeout_str),
+                                Style::default()
+                                    .fg(Color::White)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                        ])
+                        .alignment(ratatui::layout::Alignment::Center),
+                        Line::from(""),
+                    ];
+
+                    if is_editing {
+                        details.extend(vec![
+                            Line::from(vec![Span::styled(
+                                " Use Left/Right or h/l / Up/Down or j/k to adjust ",
+                                Style::default().fg(Color::Cyan),
+                            )])
+                            .alignment(ratatui::layout::Alignment::Center),
+                            Line::from(vec![
+                                Span::styled(
+                                    " Ctrl+S: ",
+                                    Style::default()
+                                        .fg(Color::Green)
+                                        .add_modifier(Modifier::BOLD),
+                                ),
+                                Span::raw("Save   "),
+                                Span::styled(" Esc: ", Style::default().fg(Color::Red)),
+                                Span::raw("Cancel"),
+                            ])
+                            .alignment(ratatui::layout::Alignment::Center),
+                        ]);
+                    } else {
+                        details.extend(vec![
+                            Line::from(vec![Span::styled(
+                                " Press Enter / e to edit ",
+                                Style::default().fg(Color::DarkGray),
+                            )])
+                            .alignment(ratatui::layout::Alignment::Center),
+                        ]);
+                    }
+
+                    f.render_widget(frame_block, content_area);
+                    f.render_widget(Paragraph::new(details), inner_area);
+                }
+                2 => {
+                    let is_editing = matches!(app.mode, AppMode::Writing { .. });
+
+                    let frame_block = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(if is_editing {
+                            Color::Cyan
+                        } else {
+                            Color::DarkGray
+                        }))
+                        .title(Span::styled(
+                            " Lock on PC Lock / Suspend ",
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+
+                    let inner_area = content_area.inner(ratatui::layout::Margin {
+                        horizontal: 2,
+                        vertical: 2,
+                    });
+
+                    let lock_val = if is_editing {
+                        app.temp_lock_on_suspend
+                    } else {
+                        app.journal.settings.lock_on_suspend
+                    };
+
+                    let lock_str = if lock_val {
+                        "Yes (Enabled)"
+                    } else {
+                        "No (Disabled)"
+                    };
+
+                    let mut details = vec![
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::styled(
+                                "Lock on Workstation Lock: ",
+                                Style::default().fg(Color::DarkGray),
+                            ),
+                            Span::styled(
+                                format!(" < {} > ", lock_str),
+                                Style::default()
+                                    .fg(Color::White)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                        ])
+                        .alignment(ratatui::layout::Alignment::Center),
+                        Line::from(""),
+                    ];
+
+                    if is_editing {
+                        details.extend(vec![
+                            Line::from(vec![Span::styled(
+                                " Use Left/Right / Space or Up/Down / j/k to toggle ",
+                                Style::default().fg(Color::Cyan),
+                            )])
+                            .alignment(ratatui::layout::Alignment::Center),
+                            Line::from(vec![
+                                Span::styled(
+                                    " Ctrl+S: ",
+                                    Style::default()
+                                        .fg(Color::Green)
+                                        .add_modifier(Modifier::BOLD),
+                                ),
+                                Span::raw("Save   "),
+                                Span::styled(" Esc: ", Style::default().fg(Color::Red)),
+                                Span::raw("Cancel"),
+                            ])
+                            .alignment(ratatui::layout::Alignment::Center),
+                        ]);
+                    } else {
+                        details.extend(vec![
+                            Line::from(vec![Span::styled(
+                                " Press Enter / e to edit ",
+                                Style::default().fg(Color::DarkGray),
+                            )])
+                            .alignment(ratatui::layout::Alignment::Center),
+                        ]);
+                    }
+
+                    f.render_widget(frame_block, content_area);
+                    f.render_widget(Paragraph::new(details), inner_area);
                 }
                 _ => {}
             }
@@ -1161,7 +1318,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Span::styled(" y: ", Style::default().fg(Color::Cyan)),
             Span::styled("Yes, Delete ", Style::default().fg(Color::White)),
             Span::styled(" n/Esc: ", Style::default().fg(Color::Cyan)),
-            ],
+        ],
     };
 
     let inner_status_area = status_block.inner(status_area);
@@ -1400,7 +1557,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
         f.render_widget(calendar_p, modal_area);
     }
-
 }
 
 /// Helper function to center a modal window on screen

@@ -75,6 +75,9 @@ pub struct App {
     pub detail_scroll: u16,
     /// Whether the contact handle was manually edited.
     pub handle_edited: bool,
+    // Temporary Settings Fields for editing
+    pub temp_timeout_mins: u32,
+    pub temp_lock_on_suspend: bool,
 }
 
 impl App {
@@ -85,6 +88,8 @@ impl App {
         password: String,
         salt: [u8; SALT_SIZE],
     ) -> Self {
+        let temp_timeout_mins = journal.settings.autolock_timeout_mins;
+        let temp_lock_on_suspend = journal.settings.lock_on_suspend;
         let mut app = Self {
             journal,
             file_path,
@@ -111,6 +116,8 @@ impl App {
             should_quit: false,
             detail_scroll: 0,
             handle_edited: false,
+            temp_timeout_mins,
+            temp_lock_on_suspend,
         };
         app.sort_entries();
         app.sort_contacts();
@@ -393,9 +400,11 @@ impl App {
 
         Ok(())
     }
-
-
-
+    /// Immediately saves the current settings to disk.
+    pub fn save_settings(&mut self) -> Result<(), String> {
+        self.journal
+            .save(&self.file_path, &self.password, &self.salt)
+    }
     /// Translation helper lookup.
     pub fn tr(&self, key: TrKey) -> &'static str {
         tr(key)
@@ -575,7 +584,9 @@ pub fn tr(key: TrKey) -> &'static str {
         TrKey::FormTitleEdit => " ✏️  Edit Contact ",
         TrKey::SettingsHeader => " Settings Menu ",
         TrKey::SettingsPasswordLabel => "🔑  Change Password",
-        TrKey::SettingsPasswordDesc => "Change master password used to decrypt the journal database.",
+        TrKey::SettingsPasswordDesc => {
+            "Change master password used to decrypt the journal database."
+        }
         TrKey::SettingsLocaleLabel => "🌐  Language & Locale",
         TrKey::SettingsLocaleDesc => "Set application formatting locale for dates and times.",
         TrKey::SettingsTimezoneLabel => "🕒  Timezone",
@@ -618,4 +629,3 @@ pub fn tr(key: TrKey) -> &'static str {
         TrKey::EditorTitleNewEntry => " ➕  New Entry [Ctrl+S: Save, Esc: Cancel] ",
     }
 }
-

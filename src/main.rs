@@ -97,13 +97,41 @@ fn run_app<B: ratatui::backend::Backend>(
 where
     Box<dyn std::error::Error>: From<B::Error>,
 {
+    let mut last_activity = std::time::Instant::now();
     loop {
+        if app.should_quit {
+            break;
+        }
+
         // Render current state
         terminal.draw(|f| ui::draw(f, app))?;
 
+        // 1. Check PC lock state if enabled
+        #[cfg(target_os = "windows")]
+        {
+            if app.journal.settings.lock_on_suspend && is_workstation_locked() {
+                app.should_quit = true;
+                break;
+            }
+        }
+
+        // 2. Check inactivity timeout if enabled
+        if app.journal.settings.autolock_timeout_mins > 0 {
+            let timeout_duration = std::time::Duration::from_secs(
+                app.journal.settings.autolock_timeout_mins as u64 * 60,
+            );
+            if last_activity.elapsed() >= timeout_duration {
+                app.should_quit = true;
+                break;
+            }
+        }
+
         // Poll for inputs
-        if event::poll(std::time::Duration::from_millis(100))? {
+        if event::poll(std::time::Duration::from_millis(500))? {
             if let Event::Key(key) = event::read()? {
+                // Reset inactivity timer
+                last_activity = std::time::Instant::now();
+
                 // crossterm on Windows sends release events as well; only process press events.
                 if key.kind == event::KeyEventKind::Press {
                     match app.mode {
@@ -244,6 +272,16 @@ where
                                             app.settings_active_field = 0;
                                             app.mode = AppMode::Writing { is_edit: false };
                                         }
+                                        1 => {
+                                            app.temp_timeout_mins =
+                                                app.journal.settings.autolock_timeout_mins;
+                                            app.mode = AppMode::Writing { is_edit: false };
+                                        }
+                                        2 => {
+                                            app.temp_lock_on_suspend =
+                                                app.journal.settings.lock_on_suspend;
+                                            app.mode = AppMode::Writing { is_edit: false };
+                                        }
                                         _ => {}
                                     },
                                 }
@@ -381,57 +419,110 @@ where
                                         }
                                     }
                                 }
-                                Tab::Settings => {
-                                    if key.code == KeyCode::Esc {
-                                        app.mode = AppMode::List;
-                                    } else {
-                                        match app.selected_index {
-                                            0 => {
-                                                // Password Changer
-                                                if key.code == KeyCode::Char('s')
-                                                    && key.modifiers.contains(KeyModifiers::CONTROL)
-                                                {
-                                                    match app.handle_change_password() {
-                                                        Ok(_) => {
-                                                            app.status_msg = Some("Password changed and database re-encrypted".to_string());
-                                                            app.error_msg = None;
-                                                            app.mode = AppMode::List;
-                                                        }
-                                                        Err(e) => {
-                                                            app.error_msg = Some(e);
-                                                        }
-                                                    }
-                                                } else if key.code == KeyCode::Tab
-                                                    || key.code == KeyCode::Down
-                                                {
-                                                    app.settings_active_field =
-                                                        (app.settings_active_field + 1) % 2;
-                                                } else if key.code == KeyCode::BackTab
-                                                    || key.code == KeyCode::Up
-                                                {
-                                                    app.settings_active_field =
-                                                        if app.settings_active_field == 0 {
-                                                            1
-                                                        } else {
-                                                            0
-                                                        };
-                                                } else {
-                                                    match app.settings_active_field {
-                                                        0 => {
-                                                            app.settings_password_new.input(key);
-                                                        }
-                                                        1 => {
-                                                            app.settings_password_confirm
-                                                                .input(key);
-                                                        }
-                                                        _ => {}
-                                                    }
+                                Tab::Settings => match app.selected_index {
+                                    0 => {
+                                        if key.code == KeyCode::Esc {
+                                            app.mode = AppMode::List;
+                                        } else if key.code == KeyCode::Char('s')
+                                            && key.modifiers.contains(KeyModifiers::CONTROL)
+                                        {
+                                            match app.handle_change_password() {
+                                                Ok(_) => {
+                                                    app.status_msg = Some("Password changed and database re-encrypted".to_string());
+                                                    app.error_msg = None;
+                                                    app.mode = AppMode::List;
+                                                }
+                                                Err(e) => {
+                                                    app.error_msg = Some(e);
                                                 }
                                             }
-                                            _ => {}
+                                        } else if key.code == KeyCode::Tab
+                                            || key.code == KeyCode::Down
+                                        {
+                                            app.settings_active_field =
+                                                (app.settings_active_field + 1) % 2;
+                                        } else if key.code == KeyCode::BackTab
+                                            || key.code == KeyCode::Up
+                                        {
+                                            app.settings_active_field =
+                                                if app.settings_active_field == 0 { 1 } else { 0 };
+                                        } else {
+                                            match app.settings_active_field {
+                                                0 => {
+                                                    app.settings_password_new.input(key);
+                                                }
+                                                1 => {
+                                                    app.settings_password_confirm.input(key);
+                                                }
+                                                _ => {}
+                                            }
                                         }
                                     }
-                                }
+                                    1 => match key.code {
+                                        KeyCode::Left
+                                        | KeyCode::Char('h')
+                                        | KeyCode::Down
+                                        | KeyCode::Char('j') => {
+                                            app.temp_timeout_mins =
+                                                app.temp_timeout_mins.saturating_sub(1);
+                                        }
+                                        KeyCode::Right
+                                        | KeyCode::Char('l')
+                                        | KeyCode::Up
+                                        | KeyCode::Char('k') => {
+                                            app.temp_timeout_mins =
+                                                app.temp_timeout_mins.saturating_add(1);
+                                        }
+                                        KeyCode::Esc => {
+                                            app.mode = AppMode::List;
+                                        }
+                                        KeyCode::Char('s')
+                                            if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                                        {
+                                            app.journal.settings.autolock_timeout_mins =
+                                                app.temp_timeout_mins;
+                                            if let Err(e) = app.save_settings() {
+                                                app.error_msg = Some(format!("Save failed: {}", e));
+                                            } else {
+                                                app.status_msg =
+                                                    Some("Inactivity timeout updated".to_string());
+                                                app.mode = AppMode::List;
+                                            }
+                                        }
+                                        _ => {}
+                                    },
+                                    2 => match key.code {
+                                        KeyCode::Left
+                                        | KeyCode::Right
+                                        | KeyCode::Char('h')
+                                        | KeyCode::Char('l')
+                                        | KeyCode::Char(' ')
+                                        | KeyCode::Up
+                                        | KeyCode::Down
+                                        | KeyCode::Char('j')
+                                        | KeyCode::Char('k') => {
+                                            app.temp_lock_on_suspend = !app.temp_lock_on_suspend;
+                                        }
+                                        KeyCode::Esc => {
+                                            app.mode = AppMode::List;
+                                        }
+                                        KeyCode::Char('s')
+                                            if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                                        {
+                                            app.journal.settings.lock_on_suspend =
+                                                app.temp_lock_on_suspend;
+                                            if let Err(e) = app.save_settings() {
+                                                app.error_msg = Some(format!("Save failed: {}", e));
+                                            } else {
+                                                app.status_msg =
+                                                    Some("PC lock settings updated".to_string());
+                                                app.mode = AppMode::List;
+                                            }
+                                        }
+                                        _ => {}
+                                    },
+                                    _ => {}
+                                },
                             }
                         }
 
@@ -599,4 +690,28 @@ where
         }
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn is_workstation_locked() -> bool {
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn OpenInputDesktop(dwFlags: u32, fInherit: i32, dwDesiredAccess: u32) -> isize;
+        fn CloseDesktop(hDesktop: isize) -> i32;
+    }
+
+    let h = unsafe { OpenInputDesktop(0, 0, 0) };
+    if h == 0 {
+        true
+    } else {
+        unsafe {
+            CloseDesktop(h);
+        }
+        false
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_workstation_locked() -> bool {
+    false
 }
