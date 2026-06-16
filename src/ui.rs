@@ -1,4 +1,5 @@
 use crate::app::{App, AppMode, Tab};
+use crate::i18n::TrKey;
 use crate::journal::Contact;
 use ratatui::{
     Frame,
@@ -97,48 +98,64 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(Color::DarkGray));
 
-    let tab_titles = match app.active_tab {
-        Tab::Journal => vec![
-            Span::styled(
-                " ● Journal (1) ",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("   Contacts (2) ", Style::default().fg(Color::DarkGray)),
-            Span::styled("   Settings (3) ", Style::default().fg(Color::DarkGray)),
-        ],
-        Tab::Contacts => vec![
-            Span::styled("   Journal (1) ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                " ● Contacts (2) ",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("   Settings (3) ", Style::default().fg(Color::DarkGray)),
-        ],
-        Tab::Settings => vec![
-            Span::styled("   Journal (1) ", Style::default().fg(Color::DarkGray)),
-            Span::styled("   Contacts (2) ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                " ● Settings (3) ",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ],
+    let journal_title = if app.active_tab == Tab::Journal {
+        app.tr(TrKey::TabJournal).to_string()
+    } else {
+        app.tr(TrKey::TabJournal).replace("●", " ").to_string()
+    };
+    let contacts_title = if app.active_tab == Tab::Contacts {
+        app.tr(TrKey::TabContacts).to_string()
+    } else {
+        app.tr(TrKey::TabContacts).replace("●", " ").to_string()
+    };
+    let settings_title = if app.active_tab == Tab::Settings {
+        app.tr(TrKey::TabSettings).to_string()
+    } else {
+        app.tr(TrKey::TabSettings).replace("●", " ").to_string()
     };
 
+    let tab_titles = vec![
+        Span::styled(
+            journal_title,
+            if app.active_tab == Tab::Journal {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            },
+        ),
+        Span::styled(
+            contacts_title,
+            if app.active_tab == Tab::Contacts {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            },
+        ),
+        Span::styled(
+            settings_title,
+            if app.active_tab == Tab::Settings {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            },
+        ),
+    ];
+
     let tab_line = Line::from(vec![
-        Span::raw(" NAVIGATION: "),
+        Span::raw(app.tr(TrKey::NavTitle)),
         tab_titles[0].clone(),
         Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
         tab_titles[1].clone(),
         Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
         tab_titles[2].clone(),
         Span::styled(
-            "  (Press Tab or 1-3 to switch)",
+            app.tr(TrKey::NavSwitchHint),
             Style::default()
                 .fg(Color::DarkGray)
                 .add_modifier(Modifier::ITALIC),
@@ -196,7 +213,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 .collect();
 
             let list_title = Span::styled(
-                format!(" Journal Entries ({}) ", app.journal.entries.len()),
+                format!(
+                    " {} ({}) ",
+                    app.tr(TrKey::JournalEntriesTitle),
+                    app.journal.entries.len()
+                ),
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
@@ -225,9 +246,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             match app.mode {
                 AppMode::Writing { is_edit } => {
                     let editor_title = if is_edit {
-                        " ✏️  Edit Entry [Ctrl+S: Save, Esc: Cancel] "
+                        app.tr(TrKey::EditorTitleEditEntry)
                     } else {
-                        " ➕  New Entry [Ctrl+S: Save, Esc: Cancel] "
+                        app.tr(TrKey::EditorTitleNewEntry)
                     };
 
                     let editor_block = Block::default()
@@ -253,15 +274,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             .border_type(BorderType::Rounded)
                             .border_style(Style::default().fg(Color::DarkGray))
                             .title(Span::styled(
-                                " View Entry ",
+                                app.tr(TrKey::ViewEntryTitle),
                                 Style::default().fg(Color::White),
                             ));
 
                         let text = vec![
                             Line::from(""),
-                            Line::from("No entries in this journal yet.")
+                            Line::from(app.tr(TrKey::NoEntries))
                                 .alignment(ratatui::layout::Alignment::Center),
-                            Line::from("Press 'n' to write your first entry!")
+                            Line::from(app.tr(TrKey::PressNewEntry))
                                 .alignment(ratatui::layout::Alignment::Center),
                         ];
                         let paragraph = Paragraph::new(text)
@@ -274,8 +295,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                         let detail_title = Span::styled(
                             format!(
-                                " Viewing Entry ({} of {}) ",
+                                " {} ({} {} {}) ",
+                                app.tr(TrKey::ViewingEntryTitle),
                                 app.selected_index + 1,
+                                app.tr(TrKey::Of),
                                 app.journal.entries.len()
                             ),
                             Style::default()
@@ -291,7 +314,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                         let mut text_lines = vec![
                             Line::from(vec![
-                                Span::styled("Date: ", Style::default().fg(Color::Cyan)),
+                                Span::styled(
+                                    app.tr(TrKey::LabelDate),
+                                    Style::default().fg(Color::Cyan),
+                                ),
                                 Span::styled(
                                     time_str,
                                     Style::default()
@@ -372,7 +398,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 .collect();
 
             let list_title = Span::styled(
-                format!(" Contacts ({}) ", app.journal.contacts.len()),
+                format!(
+                    " {} ({}) ",
+                    app.tr(TrKey::ContactsListTitle),
+                    app.journal.contacts.len()
+                ),
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
@@ -401,9 +431,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             match app.mode {
                 AppMode::Writing { is_edit } => {
                     let form_title = if is_edit {
-                        " ✏️  Edit Contact "
+                        app.tr(TrKey::FormTitleEdit)
                     } else {
-                        " ➕  New Contact "
+                        app.tr(TrKey::FormTitleNew)
                     };
 
                     let frame_block = Block::default()
@@ -446,7 +476,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         } else {
                             Color::DarkGray
                         }))
-                        .title(" First Name ");
+                        .title(app.tr(TrKey::FormFirstNameTitle));
                     app.contact_first_name.set_block(block_first);
                     app.contact_first_name
                         .set_cursor_line_style(Style::default());
@@ -460,7 +490,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         } else {
                             Color::DarkGray
                         }))
-                        .title(" Middle Name ");
+                        .title(app.tr(TrKey::FormMiddleNameTitle));
                     app.contact_middle_name.set_block(block_middle);
                     app.contact_middle_name
                         .set_cursor_line_style(Style::default());
@@ -474,7 +504,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         } else {
                             Color::DarkGray
                         }))
-                        .title(" Last Name ");
+                        .title(app.tr(TrKey::FormLastNameTitle));
                     app.contact_last_name.set_block(block_last);
                     app.contact_last_name
                         .set_cursor_line_style(Style::default());
@@ -488,7 +518,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         } else {
                             Color::DarkGray
                         }))
-                        .title(" Handle (for @mentions) ");
+                        .title(app.tr(TrKey::FormHandleTitle));
                     app.contact_handle.set_block(block_handle);
                     app.contact_handle.set_cursor_line_style(Style::default());
                     f.render_widget(&app.contact_handle, form_chunks[3]);
@@ -501,7 +531,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         } else {
                             Color::DarkGray
                         }))
-                        .title(" Birthdate ");
+                        .title(app.tr(TrKey::FormBirthdateTitle));
                     let birth_val = match app.contact_birthdate {
                         Some(d) => Span::styled(
                             format!(
@@ -511,7 +541,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             Style::default().fg(Color::White),
                         ),
                         None => Span::styled(
-                            " [ Press Enter to select ]",
+                            app.tr(TrKey::FormPressEnterSelect),
                             Style::default().fg(Color::DarkGray),
                         ),
                     };
@@ -526,7 +556,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         } else {
                             Color::DarkGray
                         }))
-                        .title(" Date of Death ");
+                        .title(app.tr(TrKey::FormDeathdateTitle));
                     let death_val = match app.contact_deathdate {
                         Some(d) => Span::styled(
                             format!(
@@ -536,7 +566,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                             Style::default().fg(Color::White),
                         ),
                         None => Span::styled(
-                            " [ Press Enter to select ]",
+                            app.tr(TrKey::FormPressEnterSelect),
                             Style::default().fg(Color::DarkGray),
                         ),
                     };
@@ -551,7 +581,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         } else {
                             Color::DarkGray
                         }))
-                        .title(" Notes ");
+                        .title(app.tr(TrKey::FormNotesTitle));
                     app.contact_notes.set_block(block_notes);
                     app.contact_notes
                         .set_cursor_line_style(Style::default().bg(Color::Indexed(235)));
@@ -559,22 +589,23 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                     // Render hints & helpers
                     let hints = vec![
-                        Line::from("Form Controls:").alignment(ratatui::layout::Alignment::Center),
+                        Line::from(app.tr(TrKey::FormControlsTitle))
+                            .alignment(ratatui::layout::Alignment::Center),
                         Line::from(vec![
                             Span::styled(" Tab / Down arrow ", Style::default().fg(Color::Cyan)),
-                            Span::raw("Next Field   "),
+                            Span::raw(format!("{}   ", app.tr(TrKey::FormHintNext))),
                             Span::styled(
                                 " Shift+Tab / Up arrow ",
                                 Style::default().fg(Color::Cyan),
                             ),
-                            Span::raw("Prev Field"),
+                            Span::raw(app.tr(TrKey::FormHintPrev)),
                         ])
                         .alignment(ratatui::layout::Alignment::Center),
                         Line::from(vec![
                             Span::styled(" Enter ", Style::default().fg(Color::Cyan)),
-                            Span::raw("Open Calendar (on Date fields)   "),
+                            Span::raw(format!("{}   ", app.tr(TrKey::FormHintOpenCalendar))),
                             Span::styled(" Backspace / Delete ", Style::default().fg(Color::Cyan)),
-                            Span::raw("Clear Date"),
+                            Span::raw(app.tr(TrKey::FormHintClearDate)),
                         ])
                         .alignment(ratatui::layout::Alignment::Center),
                         Line::from(vec![
@@ -584,9 +615,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                                     .fg(Color::Green)
                                     .add_modifier(Modifier::BOLD),
                             ),
-                            Span::raw("Save Contact   "),
+                            Span::raw(format!("{}   ", app.tr(TrKey::FormHintSave))),
                             Span::styled(" Esc ", Style::default().fg(Color::Red)),
-                            Span::raw("Cancel"),
+                            Span::raw(app.tr(TrKey::FormHintCancel)),
                         ])
                         .alignment(ratatui::layout::Alignment::Center),
                     ];
@@ -827,7 +858,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             let settings_groups = vec![
                 "🔑  Change Password",
                 "🌐  Language & Locale",
-                "🕒  Timezone Offset",
+                "🕒  Timezone",
             ];
 
             let list_items: Vec<ListItem> = settings_groups
@@ -997,186 +1028,101 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     f.render_widget(Paragraph::new(instructions), form_chunks[2]);
                 }
                 1 => {
-                    // LANGUAGE & LOCALE SELECTOR
-                    let is_active = match app.mode {
-                        AppMode::Writing { .. } => true,
-                        _ => false,
-                    };
-
-                    let picker_block = Block::default()
+                    let frame_block = Block::default()
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(if is_active {
-                            Color::Cyan
-                        } else {
-                            Color::DarkGray
-                        }))
+                        .border_style(Style::default().fg(Color::Cyan))
                         .title(Span::styled(
-                            " Select Language & Locale ",
+                            " Language & Locale Settings ",
                             Style::default()
                                 .fg(Color::Cyan)
                                 .add_modifier(Modifier::BOLD),
                         ));
 
-                    // List of locale options
-                    let locales = vec![
-                        ("en_US", "English (United States)"),
-                        ("de_DE", "Deutsch (Deutschland)"),
-                        ("fr_FR", "Français (France)"),
-                        ("es_ES", "Español (España)"),
-                        ("it_IT", "Italiano (Italia)"),
-                        ("ja_JP", "日本語 (日本)"),
-                    ];
+                    let inner_area = content_area.inner(ratatui::layout::Margin {
+                        horizontal: 2,
+                        vertical: 2,
+                    });
 
-                    let list_items: Vec<ListItem> = locales
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, (code, name))| {
-                            let is_current = code == &app.journal.settings.locale;
-                            let is_highlighted = idx == app.settings_selected_option && is_active;
-
-                            let mut spans = vec![];
-                            if is_highlighted {
-                                spans.push(Span::styled("➔ ", Style::default().fg(Color::Cyan)));
-                            } else {
-                                spans.push(Span::raw("  "));
-                            }
-
-                            let style = if is_highlighted {
+                    let details = vec![
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::styled("Current Locale: ", Style::default().fg(Color::DarkGray)),
+                            Span::styled(
+                                format!("{}", app.journal.settings.locale),
+                                Style::default()
+                                    .fg(Color::White)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                        ]),
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::styled("Press ", Style::default().fg(Color::DarkGray)),
+                            Span::styled(
+                                "Enter",
                                 Style::default()
                                     .fg(Color::Cyan)
-                                    .add_modifier(Modifier::BOLD)
-                            } else {
-                                Style::default().fg(Color::White)
-                            };
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(
+                                " to select from all 336 standard locales.",
+                                Style::default().fg(Color::DarkGray),
+                            ),
+                        ]),
+                    ];
 
-                            spans.push(Span::styled(format!("{} - {}", code, name), style));
-
-                            if is_current {
-                                spans.push(Span::styled(
-                                    " (Active)",
-                                    Style::default()
-                                        .fg(Color::Green)
-                                        .add_modifier(Modifier::ITALIC),
-                                ));
-                            }
-
-                            ListItem::new(Line::from(spans))
-                        })
-                        .collect();
-
-                    let list_widget = List::new(list_items)
-                        .block(picker_block)
-                        .highlight_style(Style::default().bg(Color::Indexed(236)));
-
-                    let mut picker_state = ratatui::widgets::ListState::default();
-                    if is_active {
-                        picker_state.select(Some(app.settings_selected_option));
-                    }
-
-                    f.render_stateful_widget(list_widget, content_area, &mut picker_state);
+                    f.render_widget(frame_block, content_area);
+                    f.render_widget(Paragraph::new(details), inner_area);
                 }
                 2 => {
-                    // TIMEZONE OFFSET SELECTOR
-                    let is_active = match app.mode {
-                        AppMode::Writing { .. } => true,
-                        _ => false,
-                    };
-
-                    let picker_block = Block::default()
+                    let frame_block = Block::default()
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(if is_active {
-                            Color::Cyan
-                        } else {
-                            Color::DarkGray
-                        }))
+                        .border_style(Style::default().fg(Color::Cyan))
                         .title(Span::styled(
-                            " Select Timezone Offset ",
+                            " Timezone Settings ",
                             Style::default()
                                 .fg(Color::Cyan)
                                 .add_modifier(Modifier::BOLD),
                         ));
 
-                    // List of offsets (offset in mins, name)
-                    let offsets = vec![
-                        (-720, "UTC-12:00"),
-                        (-660, "UTC-11:00"),
-                        (-600, "UTC-10:00 (Hawaii)"),
-                        (-540, "UTC-09:00 (Alaska)"),
-                        (-480, "UTC-08:00 (Pacific Time)"),
-                        (-420, "UTC-07:00 (Mountain Time)"),
-                        (-360, "UTC-06:00 (Central Time)"),
-                        (-300, "UTC-05:00 (Eastern Time)"),
-                        (-240, "UTC-04:00 (Atlantic Time)"),
-                        (-180, "UTC-03:00 (Argentina/Brazil)"),
-                        (-120, "UTC-02:00"),
-                        (-60, "UTC-01:00 (Azores)"),
-                        (0, "UTC+00:00 (GMT / Greenwich Time)"),
-                        (60, "UTC+01:00 (CET - Europe/Berlin, Paris, Rome)"),
-                        (120, "UTC+02:00 (EET - Helsinki, Kyiv, Cairo)"),
-                        (180, "UTC+03:00 (Moscow, Nairobi, Baghdad)"),
-                        (240, "UTC+04:00 (Dubai)"),
-                        (300, "UTC+05:00 (Karachi, Tashkent)"),
-                        (330, "UTC+05:30 (IST - India)"),
-                        (360, "UTC+06:00 (Dhaka)"),
-                        (420, "UTC+07:00 (Bangkok, Jakarta)"),
-                        (480, "UTC+08:00 (SGT - Singapore, Beijing, Perth)"),
-                        (540, "UTC+09:00 (JST - Tokyo, Seoul)"),
-                        (600, "UTC+10:00 (AEST - Sydney, Melbourne, Vladivostok)"),
-                        (660, "UTC+11:00"),
-                        (720, "UTC+12:00 (Auckland, Fiji)"),
-                        (780, "UTC+13:00"),
-                        (840, "UTC+14:00"),
-                    ];
+                    let inner_area = content_area.inner(ratatui::layout::Margin {
+                        horizontal: 2,
+                        vertical: 2,
+                    });
 
-                    let list_items: Vec<ListItem> = offsets
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, (mins, name))| {
-                            let is_current = *mins == app.journal.settings.timezone_offset_mins;
-                            let is_highlighted = idx == app.settings_selected_option && is_active;
-
-                            let mut spans = vec![];
-                            if is_highlighted {
-                                spans.push(Span::styled("➔ ", Style::default().fg(Color::Cyan)));
-                            } else {
-                                spans.push(Span::raw("  "));
-                            }
-
-                            let style = if is_highlighted {
+                    let details = vec![
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::styled(
+                                "Current Timezone: ",
+                                Style::default().fg(Color::DarkGray),
+                            ),
+                            Span::styled(
+                                format!("{}", app.journal.settings.timezone),
+                                Style::default()
+                                    .fg(Color::White)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                        ]),
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::styled("Press ", Style::default().fg(Color::DarkGray)),
+                            Span::styled(
+                                "Enter",
                                 Style::default()
                                     .fg(Color::Cyan)
-                                    .add_modifier(Modifier::BOLD)
-                            } else {
-                                Style::default().fg(Color::White)
-                            };
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(
+                                " to select from all 400+ IANA timezones.",
+                                Style::default().fg(Color::DarkGray),
+                            ),
+                        ]),
+                    ];
 
-                            spans.push(Span::styled(*name, style));
-
-                            if is_current {
-                                spans.push(Span::styled(
-                                    " (Active)",
-                                    Style::default()
-                                        .fg(Color::Green)
-                                        .add_modifier(Modifier::ITALIC),
-                                ));
-                            }
-
-                            ListItem::new(Line::from(spans))
-                        })
-                        .collect();
-
-                    let list_widget = List::new(list_items)
-                        .block(picker_block)
-                        .highlight_style(Style::default().bg(Color::Indexed(236)));
-
-                    let mut picker_state = ratatui::widgets::ListState::default();
-                    if is_active {
-                        picker_state.select(Some(app.settings_selected_option));
-                    }
-
-                    f.render_stateful_widget(list_widget, content_area, &mut picker_state);
+                    f.render_widget(frame_block, content_area);
+                    f.render_widget(Paragraph::new(details), inner_area);
                 }
                 _ => {}
             }
@@ -1316,6 +1262,34 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Span::styled("Yes, Delete ", Style::default().fg(Color::White)),
             Span::styled(" n/Esc: ", Style::default().fg(Color::Cyan)),
             Span::styled("Cancel ", Style::default().fg(Color::White)),
+        ],
+        AppMode::LocalePicker { .. } => vec![
+            Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Cancel ", Style::default().fg(Color::White)),
+            Span::styled(" Up/Down / j/k: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Navigate ", Style::default().fg(Color::White)),
+            Span::styled(" Enter: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Select ", Style::default().fg(Color::White)),
+            Span::styled(
+                " Type to search... ",
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::ITALIC),
+            ),
+        ],
+        AppMode::TimezonePicker { .. } => vec![
+            Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Cancel ", Style::default().fg(Color::White)),
+            Span::styled(" Up/Down / j/k: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Navigate ", Style::default().fg(Color::White)),
+            Span::styled(" Enter: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Select ", Style::default().fg(Color::White)),
+            Span::styled(
+                " Type to search... ",
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::ITALIC),
+            ),
         ],
     };
 
@@ -1554,6 +1528,198 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         let calendar_p = Paragraph::new(calendar_lines).block(picker_block);
 
         f.render_widget(calendar_p, modal_area);
+    }
+
+    // --- DRAW MODAL OVERLAY FOR LOCALE PICKER ---
+    if let AppMode::LocalePicker { selected_index } = app.mode {
+        let modal_area = centered_rect(60, 60, f.area());
+        f.render_widget(Clear, modal_area);
+
+        let picker_block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Double)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(Span::styled(
+                " Select Locale (Search) ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ));
+
+        // Split modal area into: Search query input (3 lines) + scrollable list (rest)
+        let inner_modal = picker_block.inner(modal_area);
+        f.render_widget(picker_block, modal_area);
+
+        let sub_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(0)])
+            .split(inner_modal);
+
+        // Render search text box
+        let search_text = Paragraph::new(Line::from(vec![
+            Span::styled("Search: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("{}█", app.search_query),
+                Style::default().fg(Color::White),
+            ),
+        ]))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
+        f.render_widget(search_text, sub_chunks[0]);
+
+        // Get filtered matches
+        let query = app.search_query.to_lowercase();
+        let matches: Vec<&str> = crate::locale_map::ALL_LOCALES
+            .iter()
+            .filter(|&&loc| loc.to_lowercase().contains(&query))
+            .copied()
+            .collect();
+
+        let list_items: Vec<ListItem> = matches
+            .iter()
+            .enumerate()
+            .map(|(idx, &name)| {
+                let is_selected = idx == selected_index;
+                let is_current = name == app.journal.settings.locale;
+
+                let mut spans = vec![];
+                if is_selected {
+                    spans.push(Span::styled("➔ ", Style::default().fg(Color::Cyan)));
+                } else {
+                    spans.push(Span::raw("  "));
+                }
+
+                let style = if is_selected {
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                spans.push(Span::styled(name, style));
+
+                if is_current {
+                    spans.push(Span::styled(
+                        " (Current)",
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::ITALIC),
+                    ));
+                }
+
+                ListItem::new(Line::from(spans))
+            })
+            .collect();
+
+        let mut list_state = ratatui::widgets::ListState::default();
+        if !matches.is_empty() {
+            list_state.select(Some(selected_index));
+        }
+
+        let list_widget = List::new(list_items)
+            .block(Block::default().borders(Borders::NONE))
+            .highlight_style(Style::default().bg(Color::Indexed(236)));
+
+        f.render_stateful_widget(list_widget, sub_chunks[1], &mut list_state);
+    }
+
+    // --- DRAW MODAL OVERLAY FOR TIMEZONE PICKER ---
+    if let AppMode::TimezonePicker { selected_index } = app.mode {
+        let modal_area = centered_rect(60, 60, f.area());
+        f.render_widget(Clear, modal_area);
+
+        let picker_block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Double)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(Span::styled(
+                " Select Timezone (Search) ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ));
+
+        // Split modal area into: Search query input (3 lines) + scrollable list (rest)
+        let inner_modal = picker_block.inner(modal_area);
+        f.render_widget(picker_block, modal_area);
+
+        let sub_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(0)])
+            .split(inner_modal);
+
+        // Render search text box
+        let search_text = Paragraph::new(Line::from(vec![
+            Span::styled("Search: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("{}█", app.search_query),
+                Style::default().fg(Color::White),
+            ),
+        ]))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
+        f.render_widget(search_text, sub_chunks[0]);
+
+        // Get filtered matches
+        let query = app.search_query.to_lowercase();
+        let matches: Vec<String> = chrono_tz::TZ_VARIANTS
+            .iter()
+            .map(|tz| tz.name().to_string())
+            .filter(|name| name.to_lowercase().contains(&query))
+            .collect();
+
+        let list_items: Vec<ListItem> = matches
+            .iter()
+            .enumerate()
+            .map(|(idx, name)| {
+                let is_selected = idx == selected_index;
+                let is_current = name == &app.journal.settings.timezone;
+
+                let mut spans = vec![];
+                if is_selected {
+                    spans.push(Span::styled("➔ ", Style::default().fg(Color::Cyan)));
+                } else {
+                    spans.push(Span::raw("  "));
+                }
+
+                let style = if is_selected {
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                spans.push(Span::styled(name.as_str(), style));
+
+                if is_current {
+                    spans.push(Span::styled(
+                        " (Current)",
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::ITALIC),
+                    ));
+                }
+
+                ListItem::new(Line::from(spans))
+            })
+            .collect();
+
+        let mut list_state = ratatui::widgets::ListState::default();
+        if !matches.is_empty() {
+            list_state.select(Some(selected_index));
+        }
+
+        let list_widget = List::new(list_items)
+            .block(Block::default().borders(Borders::NONE))
+            .highlight_style(Style::default().bg(Color::Indexed(236)));
+
+        f.render_stateful_widget(list_widget, sub_chunks[1], &mut list_state);
     }
 }
 

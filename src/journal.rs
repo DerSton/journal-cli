@@ -142,14 +142,19 @@ impl Contact {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Settings {
     pub locale: String,
-    pub timezone_offset_mins: i32,
+    #[serde(default = "default_timezone")]
+    pub timezone: String,
+}
+
+fn default_timezone() -> String {
+    "UTC".to_string()
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             locale: "en_US".to_string(),
-            timezone_offset_mins: 0,
+            timezone: "UTC".to_string(),
         }
     }
 }
@@ -166,19 +171,10 @@ pub struct Journal {
 impl Journal {
     /// Formats a UTC timestamp localized using the current Settings.
     pub fn format_timestamp(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
-        use chrono::FixedOffset;
-        let offset = FixedOffset::east_opt(self.settings.timezone_offset_mins * 60)
-            .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap());
-        let local_time = timestamp.with_timezone(&offset);
+        let tz: chrono_tz::Tz = self.settings.timezone.parse().unwrap_or(chrono_tz::UTC);
+        let local_time = timestamp.with_timezone(&tz);
 
-        let locale = match self.settings.locale.as_str() {
-            "de_DE" => chrono::Locale::de_DE,
-            "fr_FR" => chrono::Locale::fr_FR,
-            "es_ES" => chrono::Locale::es_ES,
-            "it_IT" => chrono::Locale::it_IT,
-            "ja_JP" => chrono::Locale::ja_JP,
-            _ => chrono::Locale::en_US,
-        };
+        let locale = crate::locale_map::parse_locale(&self.settings.locale);
 
         local_time
             .format_localized("%A, %B %d, %Y - %H:%M:%S", locale)
@@ -187,19 +183,10 @@ impl Journal {
 
     /// Formats a UTC timestamp in a short date-time format localized using current Settings.
     pub fn format_timestamp_short(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
-        use chrono::FixedOffset;
-        let offset = FixedOffset::east_opt(self.settings.timezone_offset_mins * 60)
-            .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap());
-        let local_time = timestamp.with_timezone(&offset);
+        let tz: chrono_tz::Tz = self.settings.timezone.parse().unwrap_or(chrono_tz::UTC);
+        let local_time = timestamp.with_timezone(&tz);
 
-        let locale = match self.settings.locale.as_str() {
-            "de_DE" => chrono::Locale::de_DE,
-            "fr_FR" => chrono::Locale::fr_FR,
-            "es_ES" => chrono::Locale::es_ES,
-            "it_IT" => chrono::Locale::it_IT,
-            "ja_JP" => chrono::Locale::ja_JP,
-            _ => chrono::Locale::en_US,
-        };
+        let locale = crate::locale_map::parse_locale(&self.settings.locale);
 
         let fmt = match self.settings.locale.as_str() {
             "de_DE" => "%d.%m.%Y %H:%M:%S",
@@ -215,19 +202,10 @@ impl Journal {
 
     /// Formats a UTC timestamp in a short date format (e.g. YYYY-MM-DD).
     pub fn format_date_short(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
-        use chrono::FixedOffset;
-        let offset = FixedOffset::east_opt(self.settings.timezone_offset_mins * 60)
-            .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap());
-        let local_time = timestamp.with_timezone(&offset);
+        let tz: chrono_tz::Tz = self.settings.timezone.parse().unwrap_or(chrono_tz::UTC);
+        let local_time = timestamp.with_timezone(&tz);
 
-        let locale = match self.settings.locale.as_str() {
-            "de_DE" => chrono::Locale::de_DE,
-            "fr_FR" => chrono::Locale::fr_FR,
-            "es_ES" => chrono::Locale::es_ES,
-            "it_IT" => chrono::Locale::it_IT,
-            "ja_JP" => chrono::Locale::ja_JP,
-            _ => chrono::Locale::en_US,
-        };
+        let locale = crate::locale_map::parse_locale(&self.settings.locale);
 
         let fmt = match self.settings.locale.as_str() {
             "de_DE" => "%d.%m.%Y",
@@ -335,7 +313,7 @@ mod tests {
         let json_str = r#"{"entries": []}"#;
         let journal: Journal = serde_json::from_str(json_str).unwrap();
         assert_eq!(journal.settings.locale, "en_US");
-        assert_eq!(journal.settings.timezone_offset_mins, 0);
+        assert_eq!(journal.settings.timezone, "UTC");
     }
 
     #[test]
@@ -343,21 +321,41 @@ mod tests {
         let mut journal = Journal::default();
         let dt = chrono::Utc.with_ymd_and_hms(2026, 6, 16, 12, 0, 0).unwrap();
 
-        // English Default timezone 0
+        // English Default timezone UTC
         journal.settings.locale = "en_US".to_string();
-        journal.settings.timezone_offset_mins = 0;
+        journal.settings.timezone = "UTC".to_string();
         let formatted = journal.format_timestamp(&dt);
         assert!(formatted.contains("Tuesday"));
         assert!(formatted.contains("June"));
         assert!(formatted.contains("12:00:00"));
 
-        // German timezone +1 hour -> 13:00:00
+        // German timezone Europe/Berlin (CEST is UTC+2 in June 2026) -> 14:00:00
         journal.settings.locale = "de_DE".to_string();
-        journal.settings.timezone_offset_mins = 60;
+        journal.settings.timezone = "Europe/Berlin".to_string();
         let formatted_de = journal.format_timestamp(&dt);
         assert!(formatted_de.contains("Dienstag"));
         assert!(formatted_de.contains("Juni"));
-        assert!(formatted_de.contains("13:00:00"));
+        assert!(formatted_de.contains("14:00:00"));
+    }
+
+    #[test]
+    fn test_timezone_parsing_fallback() {
+        let mut journal = Journal::default();
+        let dt = chrono::Utc.with_ymd_and_hms(2026, 6, 16, 12, 0, 0).unwrap();
+
+        // Invalid timezone should fallback to UTC
+        journal.settings.timezone = "Invalid/Timezone".to_string();
+        let formatted = journal.format_timestamp(&dt);
+        assert!(formatted.contains("12:00:00"));
+    }
+
+    #[test]
+    fn test_locale_mapping_fallbacks() {
+        let loc_de = crate::locale_map::parse_locale("de_DE");
+        assert_eq!(loc_de, chrono::Locale::de_DE);
+
+        let loc_unknown = crate::locale_map::parse_locale("xx_XX");
+        assert_eq!(loc_unknown, chrono::Locale::POSIX);
     }
 
     #[test]

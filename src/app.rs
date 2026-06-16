@@ -26,6 +26,12 @@ pub enum AppMode {
         field_index: usize,
         current_date: chrono::NaiveDate,
     },
+    LocalePicker {
+        selected_index: usize,
+    },
+    TimezonePicker {
+        selected_index: usize,
+    },
     DeleteConfirm,
 }
 
@@ -64,8 +70,6 @@ pub struct App {
     pub settings_password_confirm: TextArea<'static>,
     /// Active field index in settings password changer (0: New, 1: Confirm).
     pub settings_active_field: usize,
-    /// Highlighted option index in settings dropdown selection lists.
-    pub settings_selected_option: usize,
 
     /// Global error toast message.
     pub error_msg: Option<String>,
@@ -77,6 +81,8 @@ pub struct App {
     pub detail_scroll: u16,
     /// Whether the contact handle was manually edited.
     pub handle_edited: bool,
+    /// Text input query for searching timezones and locales in pickers.
+    pub search_query: String,
 }
 
 impl App {
@@ -107,12 +113,13 @@ impl App {
             settings_password_new: TextArea::default(),
             settings_password_confirm: TextArea::default(),
             settings_active_field: 0,
-            settings_selected_option: 0,
+
             error_msg: None,
             status_msg: Some("Welcome to your secure journal CLI!".to_string()),
             should_quit: false,
             detail_scroll: 0,
             handle_edited: false,
+            search_query: String::new(),
         };
         app.sort_entries();
         app.sort_contacts();
@@ -400,5 +407,10 @@ impl App {
     pub fn save_settings(&mut self) -> Result<(), String> {
         self.journal
             .save(&self.file_path, &self.password, &self.salt)
+    }
+
+    /// Translation helper lookup.
+    pub fn tr(&self, key: crate::i18n::TrKey) -> &'static str {
+        crate::i18n::tr(key, &self.journal.settings.locale)
     }
 }
