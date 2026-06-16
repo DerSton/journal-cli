@@ -26,12 +26,6 @@ pub enum AppMode {
         field_index: usize,
         current_date: chrono::NaiveDate,
     },
-    LocalePicker {
-        selected_index: usize,
-    },
-    TimezonePicker {
-        selected_index: usize,
-    },
     DeleteConfirm,
 }
 
@@ -81,8 +75,6 @@ pub struct App {
     pub detail_scroll: u16,
     /// Whether the contact handle was manually edited.
     pub handle_edited: bool,
-    /// Text input query for searching timezones and locales in pickers.
-    pub search_query: String,
 }
 
 impl App {
@@ -119,7 +111,6 @@ impl App {
             should_quit: false,
             detail_scroll: 0,
             handle_edited: false,
-            search_query: String::new(),
         };
         app.sort_entries();
         app.sort_contacts();
@@ -403,14 +394,228 @@ impl App {
         Ok(())
     }
 
-    /// Immediately saves the current settings to disk.
-    pub fn save_settings(&mut self) -> Result<(), String> {
-        self.journal
-            .save(&self.file_path, &self.password, &self.salt)
-    }
+
 
     /// Translation helper lookup.
-    pub fn tr(&self, key: crate::i18n::TrKey) -> &'static str {
-        crate::i18n::tr(key, &self.journal.settings.locale)
+    pub fn tr(&self, key: TrKey) -> &'static str {
+        tr(key)
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum TrKey {
+    // Navigation
+    NavTitle,
+    NavSwitchHint,
+
+    // Tab Names
+    TabJournal,
+    TabContacts,
+    TabSettings,
+
+    // List Placeholders
+    NoEntries,
+    PressNewEntry,
+    NoContacts,
+    PressNewContact,
+    NoMentions,
+    MentionHistory,
+    JournalEntriesTitle,
+    ContactsListTitle,
+
+    // Welcome & Status Messages
+    WelcomeMsg,
+    NewEntrySaved,
+    EntryUpdated,
+    EntryDeleted,
+    NewContactSaved,
+    ContactUpdated,
+    ContactDeleted,
+    PasswordChanged,
+    SaveFailed,
+    LocaleUpdated,
+    TimezoneUpdated,
+
+    // Contact Profile Preview
+    ProfileTitle,
+    ProfileFirstName,
+    ProfileMiddleName,
+    ProfileLastName,
+    ProfileHandle,
+    ProfileBorn,
+    ProfileDeceased,
+    ProfileNotes,
+    ProfileAge,
+    ProfileAged,
+
+    // Contact Form Editor
+    FormFirstNameTitle,
+    FormMiddleNameTitle,
+    FormLastNameTitle,
+    FormHandleTitle,
+    FormBirthdateTitle,
+    FormDeathdateTitle,
+    FormNotesTitle,
+    FormPressEnterSelect,
+    FormHintNext,
+    FormHintPrev,
+    FormHintOpenCalendar,
+    FormHintClearDate,
+    FormHintSave,
+    FormHintCancel,
+    FormControlsTitle,
+    FormTitleNew,
+    FormTitleEdit,
+
+    // Settings Options
+    SettingsHeader,
+    SettingsPasswordLabel,
+    SettingsPasswordDesc,
+    SettingsLocaleLabel,
+    SettingsLocaleDesc,
+    SettingsTimezoneLabel,
+    SettingsTimezoneDesc,
+    SettingsChangePasswordTitle,
+    SettingsNewPasswordInput,
+    SettingsConfirmPasswordInput,
+    SettingsSubmitHint,
+    SettingsSelected,
+
+    // Help & Buttons Bar
+    HelpQuit,
+    HelpNewEntry,
+    HelpNewContact,
+    HelpEdit,
+    HelpDelete,
+    HelpScrollPreview,
+    HelpSelectOption,
+    HelpSelectSave,
+    HelpConfirmDelete,
+    HelpYesDelete,
+    HelpCancel,
+    HelpNavigate,
+    HelpMonth,
+    HelpYear,
+    HelpPick,
+    HelpClear,
+
+    // Modals
+    ModalWarningTitle,
+    ModalDeleteConfirmQuestion,
+    ModalDeletePermanentWarning,
+    ModalDeleteYesBtn,
+    ModalDeleteCancelBtn,
+    ModalContactPickerTitle,
+    ModalLocaleTitle,
+    ModalTimezoneTitle,
+    ModalSearchPrompt,
+
+    // Additional Preview
+    ViewEntryTitle,
+    ViewingEntryTitle,
+    Of,
+    LabelDate,
+    EditorTitleEditEntry,
+    EditorTitleNewEntry,
+}
+
+pub fn tr(key: TrKey) -> &'static str {
+    match key {
+        TrKey::NavTitle => " NAVIGATION: ",
+        TrKey::NavSwitchHint => "  (Press Tab or 1-3 to switch)",
+        TrKey::TabJournal => " ● Journal (1) ",
+        TrKey::TabContacts => " ● Contacts (2) ",
+        TrKey::TabSettings => " ● Settings (3) ",
+        TrKey::NoEntries => "No entries found in database.",
+        TrKey::PressNewEntry => "Press 'n' to write your first entry!",
+        TrKey::NoContacts => "No contacts found in database.",
+        TrKey::PressNewContact => "Press 'n' to add a new contact!",
+        TrKey::NoMentions => "No mentions found in journal entries.",
+        TrKey::MentionHistory => " Mentions in Journal ",
+        TrKey::JournalEntriesTitle => " Journal Entries ",
+        TrKey::ContactsListTitle => " Contacts ",
+        TrKey::WelcomeMsg => "Welcome to your secure journal CLI!",
+        TrKey::NewEntrySaved => "New entry saved",
+        TrKey::EntryUpdated => "Entry updated",
+        TrKey::EntryDeleted => "Entry deleted",
+        TrKey::NewContactSaved => "New contact saved",
+        TrKey::ContactUpdated => "Contact updated",
+        TrKey::ContactDeleted => "Contact deleted",
+        TrKey::PasswordChanged => "Password changed and database re-encrypted",
+        TrKey::SaveFailed => "Save failed",
+        TrKey::LocaleUpdated => "Locale updated to",
+        TrKey::TimezoneUpdated => "Timezone updated to",
+        TrKey::ProfileTitle => " Contact Profile ",
+        TrKey::ProfileFirstName => "  First Name:  ",
+        TrKey::ProfileMiddleName => "  Middle Name: ",
+        TrKey::ProfileLastName => "  Last Name:   ",
+        TrKey::ProfileHandle => "  Handle:      ",
+        TrKey::ProfileBorn => "  Born:        ",
+        TrKey::ProfileDeceased => "  Deceased:    ",
+        TrKey::ProfileNotes => "  Notes:",
+        TrKey::ProfileAge => "(Age: {})",
+        TrKey::ProfileAged => "(Aged: {})",
+        TrKey::FormFirstNameTitle => " First Name ",
+        TrKey::FormMiddleNameTitle => " Middle Name ",
+        TrKey::FormLastNameTitle => " Last Name ",
+        TrKey::FormHandleTitle => " Handle (for @mentions) ",
+        TrKey::FormBirthdateTitle => " Birthdate ",
+        TrKey::FormDeathdateTitle => " Date of Death ",
+        TrKey::FormNotesTitle => " Notes ",
+        TrKey::FormPressEnterSelect => " [ Press Enter to select ]",
+        TrKey::FormHintNext => "Next Field",
+        TrKey::FormHintPrev => "Prev Field",
+        TrKey::FormHintOpenCalendar => "Open Calendar (on Date fields)",
+        TrKey::FormHintClearDate => "Clear Date",
+        TrKey::FormHintSave => "Save Contact",
+        TrKey::FormHintCancel => "Cancel",
+        TrKey::FormControlsTitle => "Form Controls:",
+        TrKey::FormTitleNew => " ➕  New Contact ",
+        TrKey::FormTitleEdit => " ✏️  Edit Contact ",
+        TrKey::SettingsHeader => " Settings Menu ",
+        TrKey::SettingsPasswordLabel => "🔑  Change Password",
+        TrKey::SettingsPasswordDesc => "Change master password used to decrypt the journal database.",
+        TrKey::SettingsLocaleLabel => "🌐  Language & Locale",
+        TrKey::SettingsLocaleDesc => "Set application formatting locale for dates and times.",
+        TrKey::SettingsTimezoneLabel => "🕒  Timezone",
+        TrKey::SettingsTimezoneDesc => "Configure target timezone relative to UTC.",
+        TrKey::SettingsChangePasswordTitle => " Change Password ",
+        TrKey::SettingsNewPasswordInput => " New Master Password ",
+        TrKey::SettingsConfirmPasswordInput => " Confirm New Password ",
+        TrKey::SettingsSubmitHint => " Submit changes by pressing Ctrl + S ",
+        TrKey::SettingsSelected => "Active",
+        TrKey::HelpQuit => "Quit ",
+        TrKey::HelpNewEntry => "New Entry ",
+        TrKey::HelpNewContact => "New Contact ",
+        TrKey::HelpEdit => "Edit ",
+        TrKey::HelpDelete => "Delete ",
+        TrKey::HelpScrollPreview => "Scroll Preview ",
+        TrKey::HelpSelectOption => "Select Option ",
+        TrKey::HelpSelectSave => "Select & Save ",
+        TrKey::HelpConfirmDelete => "Confirm Delete? ",
+        TrKey::HelpYesDelete => "Yes, Delete ",
+        TrKey::HelpCancel => "Cancel ",
+        TrKey::HelpNavigate => "Nav ",
+        TrKey::HelpMonth => "Month ",
+        TrKey::HelpYear => "Year ",
+        TrKey::HelpPick => "Pick ",
+        TrKey::HelpClear => "Clear ",
+        TrKey::ModalWarningTitle => " WARNING ",
+        TrKey::ModalDeleteConfirmQuestion => "Are you sure you want to delete this?",
+        TrKey::ModalDeletePermanentWarning => "This action is permanent and cannot be undone.",
+        TrKey::ModalDeleteYesBtn => " [y] Yes, Delete ",
+        TrKey::ModalDeleteCancelBtn => " [n/Esc] Cancel ",
+        TrKey::ModalContactPickerTitle => " Select Contact to Mention [Enter: Pick, Esc: Cancel] ",
+        TrKey::ModalLocaleTitle => " Select Locale ",
+        TrKey::ModalTimezoneTitle => " Select Timezone ",
+        TrKey::ModalSearchPrompt => " Search: ",
+        TrKey::ViewEntryTitle => " View Entry ",
+        TrKey::ViewingEntryTitle => "Viewing Entry",
+        TrKey::Of => "of",
+        TrKey::LabelDate => "Date: ",
+        TrKey::EditorTitleEditEntry => " ✏️  Edit Entry [Ctrl+S: Save, Esc: Cancel] ",
+        TrKey::EditorTitleNewEntry => " ➕  New Entry [Ctrl+S: Save, Esc: Cancel] ",
+    }
+}
+

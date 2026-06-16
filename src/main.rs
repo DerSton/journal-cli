@@ -1,8 +1,6 @@
 mod app;
 mod crypto;
-pub mod i18n;
 mod journal;
-pub mod locale_map;
 mod ui;
 
 use app::{App, AppMode, Tab};
@@ -246,15 +244,6 @@ where
                                             app.settings_active_field = 0;
                                             app.mode = AppMode::Writing { is_edit: false };
                                         }
-                                        1 => {
-                                            app.search_query = String::new();
-                                            app.mode = AppMode::LocalePicker { selected_index: 0 };
-                                        }
-                                        2 => {
-                                            app.search_query = String::new();
-                                            app.mode =
-                                                AppMode::TimezonePicker { selected_index: 0 };
-                                        }
                                         _ => {}
                                     },
                                 }
@@ -445,128 +434,7 @@ where
                                 }
                             }
                         }
-                        AppMode::LocalePicker { selected_index } => {
-                            let query = app.search_query.to_lowercase();
-                            let matches: Vec<&str> = crate::locale_map::ALL_LOCALES
-                                .iter()
-                                .filter(|&&loc| loc.to_lowercase().contains(&query))
-                                .copied()
-                                .collect();
 
-                            match key.code {
-                                KeyCode::Esc => {
-                                    app.mode = AppMode::List;
-                                }
-                                KeyCode::Up | KeyCode::Char('k') => {
-                                    if !matches.is_empty() {
-                                        let next_idx = if selected_index > 0 {
-                                            selected_index - 1
-                                        } else {
-                                            matches.len() - 1
-                                        };
-                                        app.mode = AppMode::LocalePicker {
-                                            selected_index: next_idx,
-                                        };
-                                    }
-                                }
-                                KeyCode::Down | KeyCode::Char('j') => {
-                                    if !matches.is_empty() {
-                                        let next_idx = (selected_index + 1) % matches.len();
-                                        app.mode = AppMode::LocalePicker {
-                                            selected_index: next_idx,
-                                        };
-                                    }
-                                }
-                                KeyCode::Enter => {
-                                    if !matches.is_empty() && selected_index < matches.len() {
-                                        let chosen = matches[selected_index].to_string();
-                                        app.journal.settings.locale = chosen.clone();
-                                        if let Err(e) = app.save_settings() {
-                                            app.error_msg = Some(format!("Save failed: {}", e));
-                                        } else {
-                                            app.status_msg =
-                                                Some(format!("Locale updated to {}", chosen));
-                                            app.error_msg = None;
-                                        }
-                                    }
-                                    app.mode = AppMode::List;
-                                }
-                                KeyCode::Backspace => {
-                                    app.search_query.pop();
-                                    app.mode = AppMode::LocalePicker { selected_index: 0 };
-                                }
-                                KeyCode::Char(c) => {
-                                    if !key.modifiers.contains(KeyModifiers::CONTROL)
-                                        && !key.modifiers.contains(KeyModifiers::ALT)
-                                    {
-                                        app.search_query.push(c);
-                                        app.mode = AppMode::LocalePicker { selected_index: 0 };
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                        AppMode::TimezonePicker { selected_index } => {
-                            let query = app.search_query.to_lowercase();
-                            let matches: Vec<String> = chrono_tz::TZ_VARIANTS
-                                .iter()
-                                .map(|tz| tz.name().to_string())
-                                .filter(|name| name.to_lowercase().contains(&query))
-                                .collect();
-
-                            match key.code {
-                                KeyCode::Esc => {
-                                    app.mode = AppMode::List;
-                                }
-                                KeyCode::Up | KeyCode::Char('k') => {
-                                    if !matches.is_empty() {
-                                        let next_idx = if selected_index > 0 {
-                                            selected_index - 1
-                                        } else {
-                                            matches.len() - 1
-                                        };
-                                        app.mode = AppMode::TimezonePicker {
-                                            selected_index: next_idx,
-                                        };
-                                    }
-                                }
-                                KeyCode::Down | KeyCode::Char('j') => {
-                                    if !matches.is_empty() {
-                                        let next_idx = (selected_index + 1) % matches.len();
-                                        app.mode = AppMode::TimezonePicker {
-                                            selected_index: next_idx,
-                                        };
-                                    }
-                                }
-                                KeyCode::Enter => {
-                                    if !matches.is_empty() && selected_index < matches.len() {
-                                        let chosen = matches[selected_index].clone();
-                                        app.journal.settings.timezone = chosen.clone();
-                                        if let Err(e) = app.save_settings() {
-                                            app.error_msg = Some(format!("Save failed: {}", e));
-                                        } else {
-                                            app.status_msg =
-                                                Some(format!("Timezone updated to {}", chosen));
-                                            app.error_msg = None;
-                                        }
-                                    }
-                                    app.mode = AppMode::List;
-                                }
-                                KeyCode::Backspace => {
-                                    app.search_query.pop();
-                                    app.mode = AppMode::TimezonePicker { selected_index: 0 };
-                                }
-                                KeyCode::Char(c) => {
-                                    if !key.modifiers.contains(KeyModifiers::CONTROL)
-                                        && !key.modifiers.contains(KeyModifiers::ALT)
-                                    {
-                                        app.search_query.push(c);
-                                        app.mode = AppMode::TimezonePicker { selected_index: 0 };
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
                         AppMode::ContactPicker {
                             is_edit,
                             selected_contact_index,

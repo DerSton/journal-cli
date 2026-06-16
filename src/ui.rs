@@ -1,5 +1,4 @@
-use crate::app::{App, AppMode, Tab};
-use crate::i18n::TrKey;
+use crate::app::{App, AppMode, Tab, TrKey};
 use crate::journal::Contact;
 use ratatui::{
     Frame,
@@ -536,7 +535,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         Some(d) => Span::styled(
                             format!(
                                 " 📅 {}",
-                                Contact::format_date(d, &app.journal.settings.locale)
+                                Contact::format_date(d)
                             ),
                             Style::default().fg(Color::White),
                         ),
@@ -561,7 +560,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         Some(d) => Span::styled(
                             format!(
                                 " 📅 {}",
-                                Contact::format_date(d, &app.journal.settings.locale)
+                                Contact::format_date(d)
                             ),
                             Style::default().fg(Color::White),
                         ),
@@ -740,7 +739,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                                 Span::styled(
                                     format!(
                                         "{}{}",
-                                        Contact::format_date(birth, &app.journal.settings.locale),
+                                        Contact::format_date(birth),
                                         age_str
                                     ),
                                     Style::default().fg(Color::White),
@@ -759,7 +758,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                                 Span::styled(
                                     format!(
                                         "{}{}",
-                                        Contact::format_date(death, &app.journal.settings.locale),
+                                        Contact::format_date(death),
                                         age_str
                                     ),
                                     Style::default().fg(Color::White),
@@ -857,8 +856,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             // --- DRAW SETTINGS LIST (Left Pane) ---
             let settings_groups = vec![
                 "🔑  Change Password",
-                "🌐  Language & Locale",
-                "🕒  Timezone",
             ];
 
             let list_items: Vec<ListItem> = settings_groups
@@ -1027,103 +1024,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
                     f.render_widget(Paragraph::new(instructions), form_chunks[2]);
                 }
-                1 => {
-                    let frame_block = Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(Color::Cyan))
-                        .title(Span::styled(
-                            " Language & Locale Settings ",
-                            Style::default()
-                                .fg(Color::Cyan)
-                                .add_modifier(Modifier::BOLD),
-                        ));
-
-                    let inner_area = content_area.inner(ratatui::layout::Margin {
-                        horizontal: 2,
-                        vertical: 2,
-                    });
-
-                    let details = vec![
-                        Line::from(""),
-                        Line::from(vec![
-                            Span::styled("Current Locale: ", Style::default().fg(Color::DarkGray)),
-                            Span::styled(
-                                format!("{}", app.journal.settings.locale),
-                                Style::default()
-                                    .fg(Color::White)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                        ]),
-                        Line::from(""),
-                        Line::from(vec![
-                            Span::styled("Press ", Style::default().fg(Color::DarkGray)),
-                            Span::styled(
-                                "Enter",
-                                Style::default()
-                                    .fg(Color::Cyan)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                            Span::styled(
-                                " to select from all 336 standard locales.",
-                                Style::default().fg(Color::DarkGray),
-                            ),
-                        ]),
-                    ];
-
-                    f.render_widget(frame_block, content_area);
-                    f.render_widget(Paragraph::new(details), inner_area);
-                }
-                2 => {
-                    let frame_block = Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(Color::Cyan))
-                        .title(Span::styled(
-                            " Timezone Settings ",
-                            Style::default()
-                                .fg(Color::Cyan)
-                                .add_modifier(Modifier::BOLD),
-                        ));
-
-                    let inner_area = content_area.inner(ratatui::layout::Margin {
-                        horizontal: 2,
-                        vertical: 2,
-                    });
-
-                    let details = vec![
-                        Line::from(""),
-                        Line::from(vec![
-                            Span::styled(
-                                "Current Timezone: ",
-                                Style::default().fg(Color::DarkGray),
-                            ),
-                            Span::styled(
-                                format!("{}", app.journal.settings.timezone),
-                                Style::default()
-                                    .fg(Color::White)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                        ]),
-                        Line::from(""),
-                        Line::from(vec![
-                            Span::styled("Press ", Style::default().fg(Color::DarkGray)),
-                            Span::styled(
-                                "Enter",
-                                Style::default()
-                                    .fg(Color::Cyan)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                            Span::styled(
-                                " to select from all 400+ IANA timezones.",
-                                Style::default().fg(Color::DarkGray),
-                            ),
-                        ]),
-                    ];
-
-                    f.render_widget(frame_block, content_area);
-                    f.render_widget(Paragraph::new(details), inner_area);
-                }
                 _ => {}
             }
         }
@@ -1261,36 +1161,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Span::styled(" y: ", Style::default().fg(Color::Cyan)),
             Span::styled("Yes, Delete ", Style::default().fg(Color::White)),
             Span::styled(" n/Esc: ", Style::default().fg(Color::Cyan)),
-            Span::styled("Cancel ", Style::default().fg(Color::White)),
-        ],
-        AppMode::LocalePicker { .. } => vec![
-            Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
-            Span::styled("Cancel ", Style::default().fg(Color::White)),
-            Span::styled(" Up/Down / j/k: ", Style::default().fg(Color::Cyan)),
-            Span::styled("Navigate ", Style::default().fg(Color::White)),
-            Span::styled(" Enter: ", Style::default().fg(Color::Cyan)),
-            Span::styled("Select ", Style::default().fg(Color::White)),
-            Span::styled(
-                " Type to search... ",
-                Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(Modifier::ITALIC),
-            ),
-        ],
-        AppMode::TimezonePicker { .. } => vec![
-            Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
-            Span::styled("Cancel ", Style::default().fg(Color::White)),
-            Span::styled(" Up/Down / j/k: ", Style::default().fg(Color::Cyan)),
-            Span::styled("Navigate ", Style::default().fg(Color::White)),
-            Span::styled(" Enter: ", Style::default().fg(Color::Cyan)),
-            Span::styled("Select ", Style::default().fg(Color::White)),
-            Span::styled(
-                " Type to search... ",
-                Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(Modifier::ITALIC),
-            ),
-        ],
+            ],
     };
 
     let inner_status_area = status_block.inner(status_area);
@@ -1530,197 +1401,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         f.render_widget(calendar_p, modal_area);
     }
 
-    // --- DRAW MODAL OVERLAY FOR LOCALE PICKER ---
-    if let AppMode::LocalePicker { selected_index } = app.mode {
-        let modal_area = centered_rect(60, 60, f.area());
-        f.render_widget(Clear, modal_area);
-
-        let picker_block = Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Double)
-            .border_style(Style::default().fg(Color::Cyan))
-            .title(Span::styled(
-                " Select Locale (Search) ",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ));
-
-        // Split modal area into: Search query input (3 lines) + scrollable list (rest)
-        let inner_modal = picker_block.inner(modal_area);
-        f.render_widget(picker_block, modal_area);
-
-        let sub_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0)])
-            .split(inner_modal);
-
-        // Render search text box
-        let search_text = Paragraph::new(Line::from(vec![
-            Span::styled("Search: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                format!("{}█", app.search_query),
-                Style::default().fg(Color::White),
-            ),
-        ]))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray)),
-        );
-        f.render_widget(search_text, sub_chunks[0]);
-
-        // Get filtered matches
-        let query = app.search_query.to_lowercase();
-        let matches: Vec<&str> = crate::locale_map::ALL_LOCALES
-            .iter()
-            .filter(|&&loc| loc.to_lowercase().contains(&query))
-            .copied()
-            .collect();
-
-        let list_items: Vec<ListItem> = matches
-            .iter()
-            .enumerate()
-            .map(|(idx, &name)| {
-                let is_selected = idx == selected_index;
-                let is_current = name == app.journal.settings.locale;
-
-                let mut spans = vec![];
-                if is_selected {
-                    spans.push(Span::styled("➔ ", Style::default().fg(Color::Cyan)));
-                } else {
-                    spans.push(Span::raw("  "));
-                }
-
-                let style = if is_selected {
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(Color::White)
-                };
-                spans.push(Span::styled(name, style));
-
-                if is_current {
-                    spans.push(Span::styled(
-                        " (Current)",
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::ITALIC),
-                    ));
-                }
-
-                ListItem::new(Line::from(spans))
-            })
-            .collect();
-
-        let mut list_state = ratatui::widgets::ListState::default();
-        if !matches.is_empty() {
-            list_state.select(Some(selected_index));
-        }
-
-        let list_widget = List::new(list_items)
-            .block(Block::default().borders(Borders::NONE))
-            .highlight_style(Style::default().bg(Color::Indexed(236)));
-
-        f.render_stateful_widget(list_widget, sub_chunks[1], &mut list_state);
-    }
-
-    // --- DRAW MODAL OVERLAY FOR TIMEZONE PICKER ---
-    if let AppMode::TimezonePicker { selected_index } = app.mode {
-        let modal_area = centered_rect(60, 60, f.area());
-        f.render_widget(Clear, modal_area);
-
-        let picker_block = Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Double)
-            .border_style(Style::default().fg(Color::Cyan))
-            .title(Span::styled(
-                " Select Timezone (Search) ",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ));
-
-        // Split modal area into: Search query input (3 lines) + scrollable list (rest)
-        let inner_modal = picker_block.inner(modal_area);
-        f.render_widget(picker_block, modal_area);
-
-        let sub_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0)])
-            .split(inner_modal);
-
-        // Render search text box
-        let search_text = Paragraph::new(Line::from(vec![
-            Span::styled("Search: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                format!("{}█", app.search_query),
-                Style::default().fg(Color::White),
-            ),
-        ]))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray)),
-        );
-        f.render_widget(search_text, sub_chunks[0]);
-
-        // Get filtered matches
-        let query = app.search_query.to_lowercase();
-        let matches: Vec<String> = chrono_tz::TZ_VARIANTS
-            .iter()
-            .map(|tz| tz.name().to_string())
-            .filter(|name| name.to_lowercase().contains(&query))
-            .collect();
-
-        let list_items: Vec<ListItem> = matches
-            .iter()
-            .enumerate()
-            .map(|(idx, name)| {
-                let is_selected = idx == selected_index;
-                let is_current = name == &app.journal.settings.timezone;
-
-                let mut spans = vec![];
-                if is_selected {
-                    spans.push(Span::styled("➔ ", Style::default().fg(Color::Cyan)));
-                } else {
-                    spans.push(Span::raw("  "));
-                }
-
-                let style = if is_selected {
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(Color::White)
-                };
-                spans.push(Span::styled(name.as_str(), style));
-
-                if is_current {
-                    spans.push(Span::styled(
-                        " (Current)",
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::ITALIC),
-                    ));
-                }
-
-                ListItem::new(Line::from(spans))
-            })
-            .collect();
-
-        let mut list_state = ratatui::widgets::ListState::default();
-        if !matches.is_empty() {
-            list_state.select(Some(selected_index));
-        }
-
-        let list_widget = List::new(list_items)
-            .block(Block::default().borders(Borders::NONE))
-            .highlight_style(Style::default().bg(Color::Indexed(236)));
-
-        f.render_stateful_widget(list_widget, sub_chunks[1], &mut list_state);
-    }
 }
 
 /// Helper function to center a modal window on screen
