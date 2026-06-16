@@ -714,19 +714,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(Color::DarkGray));
 
-    let status_span = if let Some(err) = &app.error_msg {
-        Span::styled(
-            err,
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-        )
-    } else if let Some(status) = &app.status_msg {
-        Span::styled(status, Style::default().fg(Color::Green))
-    } else {
-        Span::styled(
-            "Securely encrypted with Argon2id + ChaCha20Poly1305",
-            Style::default().fg(Color::DarkGray),
-        )
-    };
+
 
     let help_spans = match app.mode {
         AppMode::List => {
@@ -812,19 +800,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         ],
     };
 
-    let status_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-        .split(status_block.inner(status_area));
-
+    let inner_status_area = status_block.inner(status_area);
     f.render_widget(status_block, status_area);
     f.render_widget(
-        Paragraph::new(Line::from(vec![Span::raw(" STATUS: "), status_span])),
-        status_layout[0],
-    );
-    f.render_widget(
-        Paragraph::new(Line::from(help_spans)).alignment(ratatui::layout::Alignment::Right),
-        status_layout[1],
+        Paragraph::new(Line::from(help_spans)).alignment(ratatui::layout::Alignment::Center),
+        inner_status_area,
     );
 
     // --- DRAW MODAL OVERLAY FOR DELETE CONFIRMATION ---
