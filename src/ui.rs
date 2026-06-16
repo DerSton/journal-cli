@@ -105,11 +105,23 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled("   Contacts (2) ", Style::default().fg(Color::DarkGray)),
+            Span::styled("   Settings (3) ", Style::default().fg(Color::DarkGray)),
         ],
         Tab::Contacts => vec![
             Span::styled("   Journal (1) ", Style::default().fg(Color::DarkGray)),
             Span::styled(
                 " ● Contacts (2) ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("   Settings (3) ", Style::default().fg(Color::DarkGray)),
+        ],
+        Tab::Settings => vec![
+            Span::styled("   Journal (1) ", Style::default().fg(Color::DarkGray)),
+            Span::styled("   Contacts (2) ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                " ● Settings (3) ",
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
@@ -122,8 +134,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         tab_titles[0].clone(),
         Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
         tab_titles[1].clone(),
+        Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
+        tab_titles[2].clone(),
         Span::styled(
-            "  (Press Tab to switch)",
+            "  (Press Tab or 1-3 to switch)",
             Style::default()
                 .fg(Color::DarkGray)
                 .add_modifier(Modifier::ITALIC),
@@ -151,8 +165,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 .enumerate()
                 .map(|(i, entry)| {
                     let is_selected = i == app.selected_index;
-                    let local_time = entry.timestamp.with_timezone(&chrono::Local);
-                    let time_str = local_time.format("%Y-%m-%d %H:%M:%S").to_string();
+                    let time_str = app.journal.format_timestamp_short(&entry.timestamp);
 
                     let snippet = entry.content.lines().next().unwrap_or("").trim();
                     let snippet_truncated = if snippet.chars().count() > 30 {
@@ -256,8 +269,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         f.render_widget(paragraph, content_area);
                     } else {
                         let entry = &app.journal.entries[app.selected_index];
-                        let local_time = entry.timestamp.with_timezone(&chrono::Local);
-                        let time_str = local_time.format("%A, %B %d, %Y - %H:%M:%S").to_string();
+                        let time_str = app.journal.format_timestamp(&entry.timestamp);
 
                         let detail_title = Span::styled(
                             format!(
@@ -675,8 +687,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         } else {
                             let mut mention_items = Vec::new();
                             for entry in mentions {
-                                let local_time = entry.timestamp.with_timezone(&chrono::Local);
-                                let date_str = local_time.format("%Y-%m-%d").to_string();
+                                let date_str = app.journal.format_date_short(&entry.timestamp);
 
                                 let snippet = entry.content.lines().next().unwrap_or("").trim();
                                 let snippet_truncated = if snippet.chars().count() > 45 {
@@ -706,6 +717,365 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 }
             }
         }
+        Tab::Settings => {
+            // --- DRAW SETTINGS LIST (Left Pane) ---
+            let settings_groups = vec![
+                "🔑  Change Password",
+                "🌐  Language & Locale",
+                "🕒  Timezone Offset",
+            ];
+
+            let list_items: Vec<ListItem> = settings_groups
+                .iter()
+                .enumerate()
+                .map(|(i, group)| {
+                    let is_selected = i == app.selected_index;
+                    let style = if is_selected {
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::White)
+                    };
+                    ListItem::new(Line::from(vec![
+                        Span::raw(if is_selected { "➔ " } else { "  " }),
+                        Span::styled(*group, style),
+                    ]))
+                })
+                .collect();
+
+            let list_block = Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(Color::DarkGray))
+                .title(Span::styled(
+                    " Settings Menu ",
+                    Style::default().fg(Color::White),
+                ));
+
+            let list_widget = List::new(list_items)
+                .block(list_block)
+                .highlight_style(Style::default().bg(Color::Indexed(236)));
+
+            let mut list_state = ratatui::widgets::ListState::default();
+            list_state.select(Some(app.selected_index));
+            f.render_stateful_widget(list_widget, list_area, &mut list_state);
+
+            // --- DRAW SETTINGS EDITOR/SELECTOR (Right Pane) ---
+            match app.selected_index {
+                0 => {
+                    // CHANGE PASSWORD EDITOR
+                    let is_editing_password = match app.mode {
+                        AppMode::Writing { .. } => true,
+                        _ => false,
+                    };
+
+                    let frame_block = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(if is_editing_password {
+                            Color::Cyan
+                        } else {
+                            Color::DarkGray
+                        }))
+                        .title(Span::styled(
+                            " Change Master Password ",
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+
+                    f.render_widget(frame_block, content_area);
+
+                    let inner_area = content_area.inner(ratatui::layout::Margin {
+                        horizontal: 2,
+                        vertical: 2,
+                    });
+                    let form_chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([
+                            Constraint::Length(3), // New Password
+                            Constraint::Length(3), // Confirm Password
+                            Constraint::Min(0),    // Instructions / Status
+                        ])
+                        .split(inner_area);
+
+                    let block_new = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(
+                            if is_editing_password && app.settings_active_field == 0 {
+                                Color::Cyan
+                            } else {
+                                Color::DarkGray
+                            },
+                        ))
+                        .title(" New Master Password ");
+                    app.settings_password_new.set_block(block_new);
+                    app.settings_password_new
+                        .set_cursor_line_style(Style::default());
+                    f.render_widget(&app.settings_password_new, form_chunks[0]);
+
+                    let block_confirm = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(
+                            if is_editing_password && app.settings_active_field == 1 {
+                                Color::Cyan
+                            } else {
+                                Color::DarkGray
+                            },
+                        ))
+                        .title(" Confirm New Password ");
+                    app.settings_password_confirm.set_block(block_confirm);
+                    app.settings_password_confirm
+                        .set_cursor_line_style(Style::default());
+                    f.render_widget(&app.settings_password_confirm, form_chunks[1]);
+
+                    // Render Instructions
+                    let mut instructions = vec![
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::styled("Press ", Style::default().fg(Color::DarkGray)),
+                            Span::styled(
+                                "Enter",
+                                Style::default()
+                                    .fg(Color::Cyan)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(" or ", Style::default().fg(Color::DarkGray)),
+                            Span::styled(
+                                "e",
+                                Style::default()
+                                    .fg(Color::Cyan)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(
+                                " to start typing new password.",
+                                Style::default().fg(Color::DarkGray),
+                            ),
+                        ])
+                        .alignment(ratatui::layout::Alignment::Center),
+                    ];
+
+                    if is_editing_password {
+                        instructions = vec![
+                            Line::from(""),
+                            Line::from(vec![
+                                Span::styled(
+                                    " Tab / Down arrow ",
+                                    Style::default().fg(Color::Cyan),
+                                ),
+                                Span::raw("Next Field   "),
+                                Span::styled(
+                                    " Shift+Tab / Up arrow ",
+                                    Style::default().fg(Color::Cyan),
+                                ),
+                                Span::raw("Prev Field"),
+                            ])
+                            .alignment(ratatui::layout::Alignment::Center),
+                            Line::from(vec![
+                                Span::styled(
+                                    " Ctrl + S ",
+                                    Style::default()
+                                        .fg(Color::Green)
+                                        .add_modifier(Modifier::BOLD),
+                                ),
+                                Span::raw("Save & Re-encrypt   "),
+                                Span::styled(" Esc ", Style::default().fg(Color::Red)),
+                                Span::raw("Cancel"),
+                            ])
+                            .alignment(ratatui::layout::Alignment::Center),
+                        ];
+                    }
+
+                    f.render_widget(Paragraph::new(instructions), form_chunks[2]);
+                }
+                1 => {
+                    // LANGUAGE & LOCALE SELECTOR
+                    let is_active = match app.mode {
+                        AppMode::Writing { .. } => true,
+                        _ => false,
+                    };
+
+                    let picker_block = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(if is_active {
+                            Color::Cyan
+                        } else {
+                            Color::DarkGray
+                        }))
+                        .title(Span::styled(
+                            " Select Language & Locale ",
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+
+                    // List of locale options
+                    let locales = vec![
+                        ("en_US", "English (United States)"),
+                        ("de_DE", "Deutsch (Deutschland)"),
+                        ("fr_FR", "Français (France)"),
+                        ("es_ES", "Español (España)"),
+                        ("it_IT", "Italiano (Italia)"),
+                        ("ja_JP", "日本語 (日本)"),
+                    ];
+
+                    let list_items: Vec<ListItem> = locales
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, (code, name))| {
+                            let is_current = code == &app.journal.settings.locale;
+                            let is_highlighted = idx == app.settings_selected_option && is_active;
+
+                            let mut spans = vec![];
+                            if is_highlighted {
+                                spans.push(Span::styled("➔ ", Style::default().fg(Color::Cyan)));
+                            } else {
+                                spans.push(Span::raw("  "));
+                            }
+
+                            let style = if is_highlighted {
+                                Style::default()
+                                    .fg(Color::Cyan)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(Color::White)
+                            };
+
+                            spans.push(Span::styled(format!("{} - {}", code, name), style));
+
+                            if is_current {
+                                spans.push(Span::styled(
+                                    " (Active)",
+                                    Style::default()
+                                        .fg(Color::Green)
+                                        .add_modifier(Modifier::ITALIC),
+                                ));
+                            }
+
+                            ListItem::new(Line::from(spans))
+                        })
+                        .collect();
+
+                    let list_widget = List::new(list_items)
+                        .block(picker_block)
+                        .highlight_style(Style::default().bg(Color::Indexed(236)));
+
+                    let mut picker_state = ratatui::widgets::ListState::default();
+                    if is_active {
+                        picker_state.select(Some(app.settings_selected_option));
+                    }
+
+                    f.render_stateful_widget(list_widget, content_area, &mut picker_state);
+                }
+                2 => {
+                    // TIMEZONE OFFSET SELECTOR
+                    let is_active = match app.mode {
+                        AppMode::Writing { .. } => true,
+                        _ => false,
+                    };
+
+                    let picker_block = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(if is_active {
+                            Color::Cyan
+                        } else {
+                            Color::DarkGray
+                        }))
+                        .title(Span::styled(
+                            " Select Timezone Offset ",
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+
+                    // List of offsets (offset in mins, name)
+                    let offsets = vec![
+                        (-720, "UTC-12:00"),
+                        (-660, "UTC-11:00"),
+                        (-600, "UTC-10:00 (Hawaii)"),
+                        (-540, "UTC-09:00 (Alaska)"),
+                        (-480, "UTC-08:00 (Pacific Time)"),
+                        (-420, "UTC-07:00 (Mountain Time)"),
+                        (-360, "UTC-06:00 (Central Time)"),
+                        (-300, "UTC-05:00 (Eastern Time)"),
+                        (-240, "UTC-04:00 (Atlantic Time)"),
+                        (-180, "UTC-03:00 (Argentina/Brazil)"),
+                        (-120, "UTC-02:00"),
+                        (-60, "UTC-01:00 (Azores)"),
+                        (0, "UTC+00:00 (GMT / Greenwich Time)"),
+                        (60, "UTC+01:00 (CET - Europe/Berlin, Paris, Rome)"),
+                        (120, "UTC+02:00 (EET - Helsinki, Kyiv, Cairo)"),
+                        (180, "UTC+03:00 (Moscow, Nairobi, Baghdad)"),
+                        (240, "UTC+04:00 (Dubai)"),
+                        (300, "UTC+05:00 (Karachi, Tashkent)"),
+                        (330, "UTC+05:30 (IST - India)"),
+                        (360, "UTC+06:00 (Dhaka)"),
+                        (420, "UTC+07:00 (Bangkok, Jakarta)"),
+                        (480, "UTC+08:00 (SGT - Singapore, Beijing, Perth)"),
+                        (540, "UTC+09:00 (JST - Tokyo, Seoul)"),
+                        (600, "UTC+10:00 (AEST - Sydney, Melbourne, Vladivostok)"),
+                        (660, "UTC+11:00"),
+                        (720, "UTC+12:00 (Auckland, Fiji)"),
+                        (780, "UTC+13:00"),
+                        (840, "UTC+14:00"),
+                    ];
+
+                    let list_items: Vec<ListItem> = offsets
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, (mins, name))| {
+                            let is_current = *mins == app.journal.settings.timezone_offset_mins;
+                            let is_highlighted = idx == app.settings_selected_option && is_active;
+
+                            let mut spans = vec![];
+                            if is_highlighted {
+                                spans.push(Span::styled("➔ ", Style::default().fg(Color::Cyan)));
+                            } else {
+                                spans.push(Span::raw("  "));
+                            }
+
+                            let style = if is_highlighted {
+                                Style::default()
+                                    .fg(Color::Cyan)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(Color::White)
+                            };
+
+                            spans.push(Span::styled(*name, style));
+
+                            if is_current {
+                                spans.push(Span::styled(
+                                    " (Active)",
+                                    Style::default()
+                                        .fg(Color::Green)
+                                        .add_modifier(Modifier::ITALIC),
+                                ));
+                            }
+
+                            ListItem::new(Line::from(spans))
+                        })
+                        .collect();
+
+                    let list_widget = List::new(list_items)
+                        .block(picker_block)
+                        .highlight_style(Style::default().bg(Color::Indexed(236)));
+
+                    let mut picker_state = ratatui::widgets::ListState::default();
+                    if is_active {
+                        picker_state.select(Some(app.settings_selected_option));
+                    }
+
+                    f.render_stateful_widget(list_widget, content_area, &mut picker_state);
+                }
+                _ => {}
+            }
+        }
     }
 
     // --- DRAW STATUS & ACTION FOOTER ---
@@ -713,8 +1083,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(Color::DarkGray));
-
-
 
     let help_spans = match app.mode {
         AppMode::List => {
@@ -750,6 +1118,18 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     spans.push(Span::styled(" d: ", Style::default().fg(Color::Cyan)));
                     spans.push(Span::styled("Delete ", Style::default().fg(Color::White)));
                 }
+                Tab::Settings => {
+                    spans.push(Span::styled(" Up/Down: ", Style::default().fg(Color::Cyan)));
+                    spans.push(Span::styled(
+                        "Select Group ",
+                        Style::default().fg(Color::White),
+                    ));
+                    spans.push(Span::styled(" Enter/e: ", Style::default().fg(Color::Cyan)));
+                    spans.push(Span::styled(
+                        "Configure ",
+                        Style::default().fg(Color::White),
+                    ));
+                }
             }
             spans.push(Span::styled(" Tab: ", Style::default().fg(Color::Cyan)));
             spans.push(Span::styled(
@@ -779,6 +1159,26 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
                 Span::styled("Cancel ", Style::default().fg(Color::White)),
             ],
+            Tab::Settings => match app.selected_index {
+                0 => vec![
+                    Span::styled(" Tab/Down: ", Style::default().fg(Color::Cyan)),
+                    Span::styled("Next Field ", Style::default().fg(Color::White)),
+                    Span::styled(" Shift+Tab/Up: ", Style::default().fg(Color::Cyan)),
+                    Span::styled("Prev Field ", Style::default().fg(Color::White)),
+                    Span::styled(" Ctrl+S: ", Style::default().fg(Color::Cyan)),
+                    Span::styled("Re-encrypt ", Style::default().fg(Color::White)),
+                    Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
+                    Span::styled("Cancel ", Style::default().fg(Color::White)),
+                ],
+                _ => vec![
+                    Span::styled(" Up/Down / j/k: ", Style::default().fg(Color::Cyan)),
+                    Span::styled("Select Option ", Style::default().fg(Color::White)),
+                    Span::styled(" Enter / Ctrl+S: ", Style::default().fg(Color::Cyan)),
+                    Span::styled("Select & Save ", Style::default().fg(Color::White)),
+                    Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
+                    Span::styled("Cancel ", Style::default().fg(Color::White)),
+                ],
+            },
         },
         AppMode::ContactPicker { .. } => vec![
             Span::styled(" Up/Down / j/k: ", Style::default().fg(Color::Cyan)),
@@ -824,6 +1224,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         let item_type = match app.active_tab {
             Tab::Journal => "journal entry",
             Tab::Contacts => "contact details",
+            Tab::Settings => "settings",
         };
 
         let confirm_text = vec![

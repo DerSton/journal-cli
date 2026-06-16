@@ -115,7 +115,8 @@ where
                             KeyCode::Tab => {
                                 let next_tab = match app.active_tab {
                                     Tab::Journal => Tab::Contacts,
-                                    Tab::Contacts => Tab::Journal,
+                                    Tab::Contacts => Tab::Settings,
+                                    Tab::Settings => Tab::Journal,
                                 };
                                 app.switch_tab(next_tab);
                             }
@@ -124,6 +125,9 @@ where
                             }
                             KeyCode::Char('2') => {
                                 app.switch_tab(Tab::Contacts);
+                            }
+                            KeyCode::Char('3') => {
+                                app.switch_tab(Tab::Settings);
                             }
                             // Selection Navigation
                             KeyCode::Up | KeyCode::Char('k') => {
@@ -138,6 +142,7 @@ where
                                 let len = match app.active_tab {
                                     Tab::Journal => app.journal.entries.len(),
                                     Tab::Contacts => app.journal.contacts.len(),
+                                    Tab::Settings => 3,
                                 };
                                 if len > 0 && app.selected_index < len - 1 {
                                     app.selected_index += 1;
@@ -178,14 +183,17 @@ where
                                         app.handle_edited = false;
                                         app.mode = AppMode::Writing { is_edit: false };
                                     }
+                                    Tab::Settings => {}
                                 }
                             }
-                            KeyCode::Char('e') => {
+                            KeyCode::Char('e') | KeyCode::Enter => {
                                 app.status_msg = None;
                                 app.error_msg = None;
                                 match app.active_tab {
                                     Tab::Journal => {
-                                        if !app.journal.entries.is_empty() {
+                                        if key.code == KeyCode::Char('e')
+                                            && !app.journal.entries.is_empty()
+                                        {
                                             let content =
                                                 &app.journal.entries[app.selected_index].content;
                                             app.textarea = ratatui_textarea::TextArea::new(
@@ -195,7 +203,9 @@ where
                                         }
                                     }
                                     Tab::Contacts => {
-                                        if !app.journal.contacts.is_empty() {
+                                        if key.code == KeyCode::Char('e')
+                                            && !app.journal.contacts.is_empty()
+                                        {
                                             let contact = &app.journal.contacts[app.selected_index];
                                             app.contact_first_name =
                                                 ratatui_textarea::TextArea::new(vec![
@@ -221,12 +231,55 @@ where
                                             app.mode = AppMode::Writing { is_edit: true };
                                         }
                                     }
+                                    Tab::Settings => {
+                                        match app.selected_index {
+                                            0 => {
+                                                app.settings_password_new =
+                                                    ratatui_textarea::TextArea::default();
+                                                app.settings_password_confirm =
+                                                    ratatui_textarea::TextArea::default();
+                                                app.settings_active_field = 0;
+                                                app.mode = AppMode::Writing { is_edit: false };
+                                            }
+                                            1 => {
+                                                let locales = vec![
+                                                    "en_US", "de_DE", "fr_FR", "es_ES", "it_IT",
+                                                    "ja_JP",
+                                                ];
+                                                app.settings_selected_option = locales
+                                                    .iter()
+                                                    .position(|&l| l == app.journal.settings.locale)
+                                                    .unwrap_or(0);
+                                                app.mode = AppMode::Writing { is_edit: true };
+                                            }
+                                            2 => {
+                                                let offsets = vec![
+                                                    -720, -660, -600, -540, -480, -420, -360, -300,
+                                                    -240, -180, -120, -60, 0, 60, 120, 180, 240,
+                                                    300, 330, 360, 420, 480, 540, 600, 660, 720,
+                                                    780, 840,
+                                                ];
+                                                app.settings_selected_option = offsets
+                                                    .iter()
+                                                    .position(|&o| {
+                                                        o == app
+                                                            .journal
+                                                            .settings
+                                                            .timezone_offset_mins
+                                                    })
+                                                    .unwrap_or(12); // UTC+00:00 is index 12
+                                                app.mode = AppMode::Writing { is_edit: true };
+                                            }
+                                            _ => {}
+                                        }
+                                    }
                                 }
                             }
                             KeyCode::Char('d') | KeyCode::Delete | KeyCode::Esc => {
                                 let is_empty = match app.active_tab {
                                     Tab::Journal => app.journal.entries.is_empty(),
                                     Tab::Contacts => app.journal.contacts.is_empty(),
+                                    Tab::Settings => true,
                                 };
                                 if key.code == KeyCode::Esc {
                                     app.should_quit = true;
@@ -328,6 +381,137 @@ where
                                         }
                                     }
                                 }
+                                Tab::Settings => {
+                                    if key.code == KeyCode::Esc {
+                                        app.mode = AppMode::List;
+                                    } else {
+                                        match app.selected_index {
+                                            0 => {
+                                                // Password Changer
+                                                if key.code == KeyCode::Char('s')
+                                                    && key.modifiers.contains(KeyModifiers::CONTROL)
+                                                {
+                                                    match app.handle_change_password() {
+                                                        Ok(_) => {
+                                                            app.status_msg = Some("Password changed and database re-encrypted".to_string());
+                                                            app.error_msg = None;
+                                                            app.mode = AppMode::List;
+                                                        }
+                                                        Err(e) => {
+                                                            app.error_msg = Some(e);
+                                                        }
+                                                    }
+                                                } else if key.code == KeyCode::Tab
+                                                    || key.code == KeyCode::Down
+                                                {
+                                                    app.settings_active_field =
+                                                        (app.settings_active_field + 1) % 2;
+                                                } else if key.code == KeyCode::BackTab
+                                                    || key.code == KeyCode::Up
+                                                {
+                                                    app.settings_active_field =
+                                                        if app.settings_active_field == 0 {
+                                                            1
+                                                        } else {
+                                                            0
+                                                        };
+                                                } else {
+                                                    match app.settings_active_field {
+                                                        0 => {
+                                                            app.settings_password_new.input(key);
+                                                        }
+                                                        1 => {
+                                                            app.settings_password_confirm
+                                                                .input(key);
+                                                        }
+                                                        _ => {}
+                                                    }
+                                                }
+                                            }
+                                            1 => {
+                                                // Locale Selector
+                                                let locales = vec![
+                                                    "en_US", "de_DE", "fr_FR", "es_ES", "it_IT",
+                                                    "ja_JP",
+                                                ];
+                                                match key.code {
+                                                    KeyCode::Up | KeyCode::Char('k') => {
+                                                        app.settings_selected_option =
+                                                            if app.settings_selected_option > 0 {
+                                                                app.settings_selected_option - 1
+                                                            } else {
+                                                                locales.len() - 1
+                                                            };
+                                                    }
+                                                    KeyCode::Down | KeyCode::Char('j') => {
+                                                        app.settings_selected_option =
+                                                            (app.settings_selected_option + 1)
+                                                                % locales.len();
+                                                    }
+                                                    KeyCode::Enter => {
+                                                        app.journal.settings.locale = locales
+                                                            [app.settings_selected_option]
+                                                            .to_string();
+                                                        if let Err(e) = app.save_settings() {
+                                                            app.error_msg =
+                                                                Some(format!("Save failed: {}", e));
+                                                        } else {
+                                                            app.status_msg = Some(format!(
+                                                                "Locale updated to {}",
+                                                                locales
+                                                                    [app.settings_selected_option]
+                                                            ));
+                                                            app.error_msg = None;
+                                                            app.mode = AppMode::List;
+                                                        }
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                            2 => {
+                                                // Timezone Selector
+                                                let offsets = vec![
+                                                    -720, -660, -600, -540, -480, -420, -360, -300,
+                                                    -240, -180, -120, -60, 0, 60, 120, 180, 240,
+                                                    300, 330, 360, 420, 480, 540, 600, 660, 720,
+                                                    780, 840,
+                                                ];
+                                                match key.code {
+                                                    KeyCode::Up | KeyCode::Char('k') => {
+                                                        app.settings_selected_option =
+                                                            if app.settings_selected_option > 0 {
+                                                                app.settings_selected_option - 1
+                                                            } else {
+                                                                offsets.len() - 1
+                                                            };
+                                                    }
+                                                    KeyCode::Down | KeyCode::Char('j') => {
+                                                        app.settings_selected_option =
+                                                            (app.settings_selected_option + 1)
+                                                                % offsets.len();
+                                                    }
+                                                    KeyCode::Enter => {
+                                                        app.journal.settings.timezone_offset_mins =
+                                                            offsets[app.settings_selected_option];
+                                                        if let Err(e) = app.save_settings() {
+                                                            app.error_msg =
+                                                                Some(format!("Save failed: {}", e));
+                                                        } else {
+                                                            app.status_msg = Some(
+                                                                "Timezone offset updated"
+                                                                    .to_string(),
+                                                            );
+                                                            app.error_msg = None;
+                                                            app.mode = AppMode::List;
+                                                        }
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                }
                             }
                         }
                         AppMode::ContactPicker {
@@ -378,6 +562,7 @@ where
                                 match app.active_tab {
                                     Tab::Journal => app.delete_selected_entry(),
                                     Tab::Contacts => app.delete_selected_contact(),
+                                    Tab::Settings => {}
                                 };
                             }
                             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {

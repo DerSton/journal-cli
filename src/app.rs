@@ -8,6 +8,7 @@ use uuid::Uuid;
 pub enum Tab {
     Journal,
     Contacts,
+    Settings,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +36,7 @@ pub struct App {
 
     /// Current active tab.
     pub active_tab: Tab,
-    /// Index of the currently highlighted item (entry or contact) in the list.
+    /// Index of the currently highlighted item (entry, contact, or settings group) in the list.
     pub selected_index: usize,
     /// Current view/interaction mode.
     pub mode: AppMode,
@@ -50,6 +51,14 @@ pub struct App {
     pub contact_notes: TextArea<'static>,
     /// Active field index in the contact editor (0: First, 1: Middle, 2: Last, 3: Handle, 4: Notes).
     pub active_field_index: usize,
+
+    // Settings Fields
+    pub settings_password_new: TextArea<'static>,
+    pub settings_password_confirm: TextArea<'static>,
+    /// Active field index in settings password changer (0: New, 1: Confirm).
+    pub settings_active_field: usize,
+    /// Highlighted option index in settings dropdown selection lists.
+    pub settings_selected_option: usize,
 
     /// Global error toast message.
     pub error_msg: Option<String>,
@@ -86,6 +95,10 @@ impl App {
             contact_handle: TextArea::default(),
             contact_notes: TextArea::default(),
             active_field_index: 0,
+            settings_password_new: TextArea::default(),
+            settings_password_confirm: TextArea::default(),
+            settings_active_field: 0,
+            settings_selected_option: 0,
             error_msg: None,
             status_msg: Some("Welcome to your secure journal CLI!".to_string()),
             should_quit: false,
@@ -329,5 +342,50 @@ impl App {
             .iter()
             .filter(|entry| entry.content.to_lowercase().contains(&target))
             .collect()
+    }
+
+    /// Transactionally updates the master password, re-encrypts the journal file, and updates memory credentials.
+    pub fn handle_change_password(&mut self) -> Result<(), String> {
+        let new_pw = self.settings_password_new.lines().join("");
+        let confirm_pw = self.settings_password_confirm.lines().join("");
+
+        if new_pw.is_empty() {
+            return Err("New password cannot be empty".to_string());
+        }
+        if new_pw != confirm_pw {
+            return Err("Passwords do not match".to_string());
+        }
+
+        // Generate new salt
+        use rand::random;
+        let new_salt: [u8; crate::crypto::SALT_SIZE] = random();
+
+        // Transactional save to tmp first
+        let tmp_path = format!("{}.tmp", self.file_path);
+        if let Err(e) = self.journal.save(&tmp_path, &new_pw, &new_salt) {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(format!("Failed to write encrypted file: {}", e));
+        }
+
+        // Rename tmp to actual path
+        if let Err(e) = std::fs::rename(&tmp_path, &self.file_path) {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(format!("Failed to finalize new password file: {}", e));
+        }
+
+        // Update memory state
+        self.password = new_pw;
+        self.salt = new_salt;
+        self.settings_password_new = TextArea::default();
+        self.settings_password_confirm = TextArea::default();
+        self.settings_active_field = 0;
+
+        Ok(())
+    }
+
+    /// Immediately saves the current settings to disk.
+    pub fn save_settings(&mut self) -> Result<(), String> {
+        self.journal
+            .save(&self.file_path, &self.password, &self.salt)
     }
 }

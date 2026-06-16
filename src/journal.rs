@@ -96,14 +96,108 @@ impl Contact {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Settings {
+    pub locale: String,
+    pub timezone_offset_mins: i32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            locale: "en_US".to_string(),
+            timezone_offset_mins: 0,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Journal {
     pub entries: Vec<JournalEntry>,
     #[serde(default)]
     pub contacts: Vec<Contact>,
+    #[serde(default)]
+    pub settings: Settings,
 }
 
 impl Journal {
+    /// Formats a UTC timestamp localized using the current Settings.
+    pub fn format_timestamp(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
+        use chrono::FixedOffset;
+        let offset = FixedOffset::east_opt(self.settings.timezone_offset_mins * 60)
+            .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap());
+        let local_time = timestamp.with_timezone(&offset);
+
+        let locale = match self.settings.locale.as_str() {
+            "de_DE" => chrono::Locale::de_DE,
+            "fr_FR" => chrono::Locale::fr_FR,
+            "es_ES" => chrono::Locale::es_ES,
+            "it_IT" => chrono::Locale::it_IT,
+            "ja_JP" => chrono::Locale::ja_JP,
+            _ => chrono::Locale::en_US,
+        };
+
+        local_time
+            .format_localized("%A, %B %d, %Y - %H:%M:%S", locale)
+            .to_string()
+    }
+
+    /// Formats a UTC timestamp in a short date-time format localized using current Settings.
+    pub fn format_timestamp_short(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
+        use chrono::FixedOffset;
+        let offset = FixedOffset::east_opt(self.settings.timezone_offset_mins * 60)
+            .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap());
+        let local_time = timestamp.with_timezone(&offset);
+
+        let locale = match self.settings.locale.as_str() {
+            "de_DE" => chrono::Locale::de_DE,
+            "fr_FR" => chrono::Locale::fr_FR,
+            "es_ES" => chrono::Locale::es_ES,
+            "it_IT" => chrono::Locale::it_IT,
+            "ja_JP" => chrono::Locale::ja_JP,
+            _ => chrono::Locale::en_US,
+        };
+
+        let fmt = match self.settings.locale.as_str() {
+            "de_DE" => "%d.%m.%Y %H:%M:%S",
+            "fr_FR" => "%d/%m/%Y %H:%M:%S",
+            "es_ES" => "%d/%m/%Y %H:%M:%S",
+            "it_IT" => "%d/%m/%Y %H:%M:%S",
+            "ja_JP" => "%Y/%m/%d %H:%M:%S",
+            _ => "%Y-%m-%d %H:%M:%S",
+        };
+
+        local_time.format_localized(fmt, locale).to_string()
+    }
+
+    /// Formats a UTC timestamp in a short date format (e.g. YYYY-MM-DD).
+    pub fn format_date_short(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
+        use chrono::FixedOffset;
+        let offset = FixedOffset::east_opt(self.settings.timezone_offset_mins * 60)
+            .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap());
+        let local_time = timestamp.with_timezone(&offset);
+
+        let locale = match self.settings.locale.as_str() {
+            "de_DE" => chrono::Locale::de_DE,
+            "fr_FR" => chrono::Locale::fr_FR,
+            "es_ES" => chrono::Locale::es_ES,
+            "it_IT" => chrono::Locale::it_IT,
+            "ja_JP" => chrono::Locale::ja_JP,
+            _ => chrono::Locale::en_US,
+        };
+
+        let fmt = match self.settings.locale.as_str() {
+            "de_DE" => "%d.%m.%Y",
+            "fr_FR" => "%d/%m/%Y",
+            "es_ES" => "%d/%m/%Y",
+            "it_IT" => "%d/%m/%Y",
+            "ja_JP" => "%Y/%m/%d",
+            _ => "%Y-%m-%d",
+        };
+
+        local_time.format_localized(fmt, locale).to_string()
+    }
+
     /// Load and decrypt a journal file using the provided password.
     ///
     /// Returns the decrypted Journal struct and the file's salt.
@@ -185,5 +279,41 @@ impl Journal {
         journal.save(path, password, &salt)?;
 
         Ok((journal, salt))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn test_settings_serialization_defaults() {
+        let json_str = r#"{"entries": []}"#;
+        let journal: Journal = serde_json::from_str(json_str).unwrap();
+        assert_eq!(journal.settings.locale, "en_US");
+        assert_eq!(journal.settings.timezone_offset_mins, 0);
+    }
+
+    #[test]
+    fn test_format_timestamp_locales() {
+        let mut journal = Journal::default();
+        let dt = chrono::Utc.with_ymd_and_hms(2026, 6, 16, 12, 0, 0).unwrap();
+
+        // English Default timezone 0
+        journal.settings.locale = "en_US".to_string();
+        journal.settings.timezone_offset_mins = 0;
+        let formatted = journal.format_timestamp(&dt);
+        assert!(formatted.contains("Tuesday"));
+        assert!(formatted.contains("June"));
+        assert!(formatted.contains("12:00:00"));
+
+        // German timezone +1 hour -> 13:00:00
+        journal.settings.locale = "de_DE".to_string();
+        journal.settings.timezone_offset_mins = 60;
+        let formatted_de = journal.format_timestamp(&dt);
+        assert!(formatted_de.contains("Dienstag"));
+        assert!(formatted_de.contains("Juni"));
+        assert!(formatted_de.contains("13:00:00"));
     }
 }
