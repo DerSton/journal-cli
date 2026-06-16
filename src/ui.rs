@@ -126,7 +126,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         app.tr(TrKey::TabSettings).replace("●", " ").to_string()
     };
 
-    let tab_titles = vec![
+    let tab_titles = [
         Span::styled(
             journal_title,
             if app.active_tab == Tab::Journal {
@@ -1331,7 +1331,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     }
 
                     f.render_widget(frame_block, content_area);
-                    f.render_widget(Paragraph::new(details), inner_area);
+                    f.render_widget(
+                        Paragraph::new(details).wrap(ratatui::widgets::Wrap { trim: false }),
+                        inner_area,
+                    );
                 }
                 _ => {}
             }
@@ -1904,7 +1907,7 @@ fn draw_recovery(f: &mut Frame, app: &mut App) {
         }
     }
 
-    let shares_paragraph = Paragraph::new(share_lines);
+    let shares_paragraph = Paragraph::new(share_lines).wrap(ratatui::widgets::Wrap { trim: false });
 
     let mut footer_lines = vec![];
     if let Some(ref status) = app.recovery_status_msg {

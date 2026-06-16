@@ -142,7 +142,7 @@ fn interpolate_at_zero(shares: &[(u8, u8)]) -> u8 {
 }
 
 fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("Hex string must have an even length".to_string());
     }
     let mut bytes = Vec::with_capacity(s.len() / 2);
