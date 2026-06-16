@@ -85,6 +85,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         draw_recovery(f, app);
         return;
     }
+    if app.mode == AppMode::RecoveryReset {
+        draw_recovery_reset(f, app);
+        return;
+    }
 
     // 1. Create vertical layout split: Tab bar (3 lines) + Main Body + Bottom status/help bar (3 lines)
     let chunks = Layout::default()
@@ -1479,6 +1483,14 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
             Span::styled("Back to Login ", Style::default().fg(Color::White)),
         ],
+        AppMode::RecoveryReset => vec![
+            Span::styled(" Tab/Down: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Next Field ", Style::default().fg(Color::White)),
+            Span::styled(" Ctrl+S: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Save & Open ", Style::default().fg(Color::White)),
+            Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Exit ", Style::default().fg(Color::White)),
+        ],
     };
 
     let inner_status_area = status_block.inner(status_area);
@@ -1937,4 +1949,110 @@ fn draw_recovery(f: &mut Frame, app: &mut App) {
     f.render_widget(&app.recovery_textarea, inner_chunks[1]);
     f.render_widget(shares_paragraph, inner_chunks[3]);
     f.render_widget(footer_paragraph, inner_chunks[4]);
+}
+
+fn draw_recovery_reset(f: &mut Frame, app: &mut App) {
+    let area = centered_rect(70, 65, f.area());
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(Span::styled(
+            " 🔧 Reset Master Password ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let inner_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(5), // Header instructions
+            Constraint::Length(3), // New Password input
+            Constraint::Length(3), // Confirm Password input
+            Constraint::Min(0),    // Error message & hints
+        ])
+        .split(block.inner(area));
+
+    let header = Paragraph::new(vec![
+        Line::from("Recovery shares successfully matched!")
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD),
+        Line::from(""),
+        Line::from("Please set a new master password (it can be the same as your old one)."),
+        Line::from(
+            "NOTE: If you use the same password, your existing recovery shares will remain valid.",
+        ),
+        Line::from("If you choose a new password, you must generate new recovery shares."),
+    ])
+    .alignment(ratatui::layout::Alignment::Center);
+
+    let block_new = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(if app.settings_active_field == 0 {
+            Color::Cyan
+        } else {
+            Color::DarkGray
+        }))
+        .title(" New Master Password ");
+    app.settings_password_new.set_block(block_new);
+    app.settings_password_new
+        .set_cursor_line_style(Style::default());
+
+    let block_confirm = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(if app.settings_active_field == 1 {
+            Color::Cyan
+        } else {
+            Color::DarkGray
+        }))
+        .title(" Confirm New Password ");
+    app.settings_password_confirm.set_block(block_confirm);
+    app.settings_password_confirm
+        .set_cursor_line_style(Style::default());
+
+    let mut footer_lines = vec![Line::from("")];
+    if let Some(ref err) = app.error_msg {
+        footer_lines.push(
+            Line::from(err.as_str())
+                .fg(Color::Red)
+                .add_modifier(Modifier::BOLD),
+        );
+        footer_lines.push(Line::from(""));
+    }
+
+    footer_lines.push(
+        Line::from(vec![
+            Span::styled(" Tab / Down: ", Style::default().fg(Color::Cyan)),
+            Span::raw("Next Field   "),
+            Span::styled(" Shift+Tab / Up: ", Style::default().fg(Color::Cyan)),
+            Span::raw("Prev Field"),
+        ])
+        .alignment(ratatui::layout::Alignment::Center),
+    );
+
+    footer_lines.push(
+        Line::from(vec![
+            Span::styled(
+                " Ctrl + S: ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Save Password & Open Journal   "),
+            Span::styled(" Esc: ", Style::default().fg(Color::Red)),
+            Span::raw("Exit"),
+        ])
+        .alignment(ratatui::layout::Alignment::Center),
+    );
+
+    let footer_paragraph = Paragraph::new(footer_lines);
+
+    f.render_widget(block, area);
+    f.render_widget(header, inner_chunks[0]);
+    f.render_widget(&app.settings_password_new, inner_chunks[1]);
+    f.render_widget(&app.settings_password_confirm, inner_chunks[2]);
+    f.render_widget(footer_paragraph, inner_chunks[3]);
 }

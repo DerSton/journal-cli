@@ -29,6 +29,7 @@ pub enum AppMode {
     DeleteConfirm,
     Recovery,
     Login,
+    RecoveryReset,
 }
 
 pub struct App {

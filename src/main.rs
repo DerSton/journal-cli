@@ -847,10 +847,12 @@ where
                                                                     app.salt = s;
                                                                     app.password =
                                                                         reconstructed_pwd;
-                                                                    app.mode = AppMode::List;
-                                                                    app.sort_entries();
-                                                                    app.sort_contacts();
-                                                                    app.status_msg = Some("Journal successfully decrypted via Recovery Shares!".to_string());
+                                                                    app.mode =
+                                                                        AppMode::RecoveryReset;
+                                                                    app.settings_password_new = ratatui_textarea::TextArea::default();
+                                                                    app.settings_password_confirm = ratatui_textarea::TextArea::default();
+                                                                    app.settings_active_field = 0;
+                                                                    app.error_msg = None;
                                                                 }
                                                                 Err(e) => {
                                                                     app.error_msg = Some(format!(
@@ -890,6 +892,44 @@ where
                             _ => {
                                 app.recovery_textarea.input(key);
                             }
+                        },
+                        AppMode::RecoveryReset => match key.code {
+                            KeyCode::Esc => {
+                                app.should_quit = true;
+                            }
+                            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                match app.handle_change_password() {
+                                    Ok(_) => {
+                                        app.status_msg = Some(
+                                            "Password successfully set! Database re-encrypted."
+                                                .to_string(),
+                                        );
+                                        app.error_msg = None;
+                                        app.mode = AppMode::List;
+                                        app.sort_entries();
+                                        app.sort_contacts();
+                                    }
+                                    Err(e) => {
+                                        app.error_msg = Some(e);
+                                    }
+                                }
+                            }
+                            KeyCode::Tab | KeyCode::Down => {
+                                app.settings_active_field = (app.settings_active_field + 1) % 2;
+                            }
+                            KeyCode::BackTab | KeyCode::Up => {
+                                app.settings_active_field =
+                                    if app.settings_active_field == 0 { 1 } else { 0 };
+                            }
+                            _ => match app.settings_active_field {
+                                0 => {
+                                    app.settings_password_new.input(key);
+                                }
+                                1 => {
+                                    app.settings_password_confirm.input(key);
+                                }
+                                _ => {}
+                            },
                         },
                     }
                 }
