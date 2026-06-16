@@ -27,6 +27,8 @@ pub enum AppMode {
         current_date: chrono::NaiveDate,
     },
     DeleteConfirm,
+    Recovery,
+    Login,
 }
 
 pub struct App {
@@ -78,6 +80,14 @@ pub struct App {
     // Temporary Settings Fields for editing
     pub temp_timeout_mins: u32,
     pub temp_lock_on_suspend: bool,
+    // Recovery Mode Fields
+    pub recovery_shares: Vec<String>,
+    pub recovery_status_msg: Option<String>,
+    pub settings_num_shares: usize,
+    pub settings_threshold: usize,
+    pub generated_shares: Vec<String>,
+    pub recovery_textarea: TextArea<'static>,
+    pub login_password: String,
 }
 
 impl App {
@@ -118,6 +128,13 @@ impl App {
             handle_edited: false,
             temp_timeout_mins,
             temp_lock_on_suspend,
+            recovery_shares: Vec::new(),
+            recovery_status_msg: None,
+            settings_num_shares: 5,
+            settings_threshold: 3,
+            generated_shares: Vec::new(),
+            recovery_textarea: TextArea::default(),
+            login_password: String::new(),
         };
         app.sort_entries();
         app.sort_contacts();

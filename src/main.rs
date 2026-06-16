@@ -26,17 +26,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let journal_path = Path::new(journal_path_str);
 
     // 2. Load or Create Journal Securely
-    let (journal, salt, password) = if journal_path.exists() {
-        println!("Opening existing journal: {}", journal_path_str);
-        let password = rpassword::prompt_password("Enter Master Password: ")?;
-
-        match Journal::load(journal_path, &password) {
-            Ok((j, s)) => (j, s, password),
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-        }
+    // 2. Setup or load config details
+    let (journal, salt, password, start_in_login) = if journal_path.exists() {
+        (
+            Journal::default(),
+            [0u8; crate::crypto::SALT_SIZE],
+            String::new(),
+            true,
+        )
     } else {
         println!(
             "No journal file found at '{}'. Initializing a new secure journal.",
@@ -58,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         match Journal::create_new(journal_path, &password) {
-            Ok((j, s)) => (j, s, password),
+            Ok((j, s)) => (j, s, password, false),
             Err(e) => {
                 eprintln!("Failed to create new journal: {}", e);
                 std::process::exit(1);
@@ -75,6 +72,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. Run TUI Event Loop
     let mut app = App::new(journal, journal_path_str.clone(), password, salt);
+    if start_in_login {
+        app.mode = AppMode::Login;
+    }
     let run_result = run_app(&mut terminal, &mut app);
 
     // 5. Restore Terminal State
@@ -170,7 +170,7 @@ where
                                 let len = match app.active_tab {
                                     Tab::Journal => app.journal.entries.len(),
                                     Tab::Contacts => app.journal.contacts.len(),
-                                    Tab::Settings => 3,
+                                    Tab::Settings => 4,
                                 };
                                 if len > 0 && app.selected_index < len - 1 {
                                     app.selected_index += 1;
@@ -280,6 +280,10 @@ where
                                         2 => {
                                             app.temp_lock_on_suspend =
                                                 app.journal.settings.lock_on_suspend;
+                                            app.mode = AppMode::Writing { is_edit: false };
+                                        }
+                                        3 => {
+                                            app.settings_active_field = 0;
                                             app.mode = AppMode::Writing { is_edit: false };
                                         }
                                         _ => {}
@@ -521,6 +525,74 @@ where
                                         }
                                         _ => {}
                                     },
+                                    3 => match key.code {
+                                        KeyCode::Up
+                                        | KeyCode::Down
+                                        | KeyCode::Tab
+                                        | KeyCode::BackTab => {
+                                            app.settings_active_field =
+                                                if app.settings_active_field == 0 { 1 } else { 0 };
+                                        }
+                                        KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('j') => {
+                                            if app.settings_active_field == 0 {
+                                                if app.settings_num_shares > 1 {
+                                                    app.settings_num_shares -= 1;
+                                                    if app.settings_threshold
+                                                        > app.settings_num_shares
+                                                    {
+                                                        app.settings_threshold =
+                                                            app.settings_num_shares;
+                                                    }
+                                                }
+                                            } else {
+                                                if app.settings_threshold > 1 {
+                                                    app.settings_threshold -= 1;
+                                                }
+                                            }
+                                        }
+                                        KeyCode::Right
+                                        | KeyCode::Char('l')
+                                        | KeyCode::Char('k') => {
+                                            if app.settings_active_field == 0 {
+                                                if app.settings_num_shares < 255 {
+                                                    app.settings_num_shares += 1;
+                                                }
+                                            } else {
+                                                if app.settings_threshold < app.settings_num_shares
+                                                {
+                                                    app.settings_threshold += 1;
+                                                }
+                                            }
+                                        }
+                                        KeyCode::Esc => {
+                                            app.mode = AppMode::List;
+                                        }
+                                        KeyCode::Char('s')
+                                            if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                                        {
+                                            match crate::crypto::split_password(
+                                                &app.password,
+                                                app.settings_threshold,
+                                                app.settings_num_shares,
+                                            ) {
+                                                Ok(shares) => {
+                                                    app.generated_shares = shares;
+                                                    app.status_msg = Some(
+                                                        "Recovery shares generated successfully!"
+                                                            .to_string(),
+                                                    );
+                                                    app.mode = AppMode::List;
+                                                }
+                                                Err(e) => {
+                                                    app.error_msg = Some(format!(
+                                                        "Failed to generate shares: {}",
+                                                        e
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    },
                                     _ => {}
                                 },
                             }
@@ -679,6 +751,145 @@ where
                                 app.mode = AppMode::List;
                             }
                             _ => {}
+                        },
+                        AppMode::Login => match key.code {
+                            KeyCode::Enter => {
+                                app.error_msg = None;
+                                let path = std::path::Path::new(&app.file_path);
+                                match crate::journal::Journal::load(path, &app.login_password) {
+                                    Ok((j, s)) => {
+                                        app.journal = j;
+                                        app.salt = s;
+                                        app.password = app.login_password.clone();
+                                        app.mode = AppMode::List;
+                                        app.sort_entries();
+                                        app.sort_contacts();
+                                        app.status_msg =
+                                            Some("Journal successfully decrypted!".to_string());
+                                    }
+                                    Err(e) => {
+                                        app.error_msg = Some(format!("Decryption failed: {}", e));
+                                        app.login_password.clear();
+                                    }
+                                }
+                            }
+                            KeyCode::Esc => {
+                                app.should_quit = true;
+                            }
+                            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                app.mode = AppMode::Recovery;
+                                app.recovery_shares.clear();
+                                app.recovery_textarea = ratatui_textarea::TextArea::default();
+                                app.recovery_status_msg = None;
+                                app.error_msg = None;
+                            }
+                            KeyCode::Char(c) => {
+                                app.login_password.push(c);
+                            }
+                            KeyCode::Backspace => {
+                                app.login_password.pop();
+                            }
+                            _ => {}
+                        },
+                        AppMode::Recovery => match key.code {
+                            KeyCode::Enter => {
+                                app.error_msg = None;
+                                app.recovery_status_msg = None;
+                                let share_str =
+                                    app.recovery_textarea.lines().join("").trim().to_string();
+                                if share_str.is_empty() {
+                                    app.error_msg =
+                                        Some("Please enter a recovery share".to_string());
+                                } else {
+                                    match crate::crypto::parse_share(&share_str) {
+                                        Ok(parsed) => {
+                                            let mut already_entered = false;
+                                            for s in &app.recovery_shares {
+                                                if let Ok(p) = crate::crypto::parse_share(s) {
+                                                    if p.index == parsed.index {
+                                                        already_entered = true;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            if already_entered {
+                                                app.error_msg = Some(format!(
+                                                    "Share with index {} was already entered",
+                                                    parsed.index
+                                                ));
+                                            } else {
+                                                app.recovery_shares.push(share_str);
+                                                app.recovery_textarea =
+                                                    ratatui_textarea::TextArea::default();
+                                                app.recovery_status_msg = Some(format!(
+                                                    "Successfully added Share {}.",
+                                                    parsed.index
+                                                ));
+
+                                                if app.recovery_shares.len() >= parsed.threshold {
+                                                    app.recovery_status_msg = Some(
+                                                        "Threshold met! Reconstructing password..."
+                                                            .to_string(),
+                                                    );
+                                                    match crate::crypto::reconstruct_password(
+                                                        &app.recovery_shares,
+                                                    ) {
+                                                        Ok(reconstructed_pwd) => {
+                                                            let path = std::path::Path::new(
+                                                                &app.file_path,
+                                                            );
+                                                            match crate::journal::Journal::load(
+                                                                path,
+                                                                &reconstructed_pwd,
+                                                            ) {
+                                                                Ok((j, s)) => {
+                                                                    app.journal = j;
+                                                                    app.salt = s;
+                                                                    app.password =
+                                                                        reconstructed_pwd;
+                                                                    app.mode = AppMode::List;
+                                                                    app.sort_entries();
+                                                                    app.sort_contacts();
+                                                                    app.status_msg = Some("Journal successfully decrypted via Recovery Shares!".to_string());
+                                                                }
+                                                                Err(e) => {
+                                                                    app.error_msg = Some(format!(
+                                                                        "Decryption with reconstructed password failed: {}",
+                                                                        e
+                                                                    ));
+                                                                    app.recovery_shares.clear();
+                                                                }
+                                                            }
+                                                        }
+                                                        Err(e) => {
+                                                            app.error_msg = Some(format!(
+                                                                "Reconstruction failed: {}",
+                                                                e
+                                                            ));
+                                                            app.recovery_shares.clear();
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            app.error_msg = Some(format!(
+                                                "Invalid recovery share format: {}",
+                                                e
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                            KeyCode::Esc => {
+                                app.mode = AppMode::Login;
+                                app.error_msg = None;
+                                app.recovery_status_msg = None;
+                                app.login_password.clear();
+                            }
+                            _ => {
+                                app.recovery_textarea.input(key);
+                            }
                         },
                     }
                 }

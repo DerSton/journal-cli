@@ -77,6 +77,15 @@ fn render_mentions<'a>(line: &'a str, contacts: &[crate::journal::Contact]) -> L
 
 /// Main UI rendering entry point.
 pub fn draw(f: &mut Frame, app: &mut App) {
+    if app.mode == AppMode::Login {
+        draw_login(f, app);
+        return;
+    }
+    if app.mode == AppMode::Recovery {
+        draw_recovery(f, app);
+        return;
+    }
+
     // 1. Create vertical layout split: Tab bar (3 lines) + Main Body + Bottom status/help bar (3 lines)
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -844,6 +853,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 "🔑  Change Password",
                 "⏱️  Inactivity Timeout",
                 "🔒  Lock on PC Lock",
+                "🚑  Recovery Shares",
             ];
 
             let list_items: Vec<ListItem> = settings_groups
@@ -1181,6 +1191,144 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                     f.render_widget(frame_block, content_area);
                     f.render_widget(Paragraph::new(details), inner_area);
                 }
+                3 => {
+                    let is_editing = matches!(app.mode, AppMode::Writing { .. });
+
+                    let frame_block = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(if is_editing {
+                            Color::Cyan
+                        } else {
+                            Color::DarkGray
+                        }))
+                        .title(Span::styled(
+                            " Recovery Shares Generation ",
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+
+                    let inner_area = content_area.inner(ratatui::layout::Margin {
+                        horizontal: 2,
+                        vertical: 1,
+                    });
+
+                    let n_val = app.settings_num_shares;
+                    let t_val = app.settings_threshold;
+
+                    let mut details = vec![
+                        Line::from(""),
+                        Line::from(vec![Span::styled(
+                            "This feature allows you to split your master password into N shares.",
+                            Style::default().fg(Color::DarkGray),
+                        )])
+                        .alignment(ratatui::layout::Alignment::Center),
+                        Line::from(vec![Span::styled(
+                            "Any T shares combined will be able to decrypt your journal.",
+                            Style::default().fg(Color::DarkGray),
+                        )])
+                        .alignment(ratatui::layout::Alignment::Center),
+                        Line::from(""),
+                    ];
+
+                    if is_editing {
+                        let n_style = if app.settings_active_field == 0 {
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(Color::White)
+                        };
+
+                        let t_style = if app.settings_active_field == 1 {
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(Color::White)
+                        };
+
+                        details.extend(vec![
+                            Line::from(vec![
+                                Span::styled("Total Shares (N):       ", Style::default().fg(Color::DarkGray)),
+                                Span::styled(format!(" < {} > ", n_val), n_style),
+                            ]).alignment(ratatui::layout::Alignment::Center),
+                            Line::from(""),
+                            Line::from(vec![
+                                Span::styled("Required Threshold (T): ", Style::default().fg(Color::DarkGray)),
+                                Span::styled(format!(" < {} > ", t_val), t_style),
+                            ]).alignment(ratatui::layout::Alignment::Center),
+                            Line::from(""),
+                            Line::from(vec![
+                                Span::styled(" Use Up/Down or Tab to switch fields. Left/Right or h/l to adjust. ", Style::default().fg(Color::Cyan)),
+                            ]).alignment(ratatui::layout::Alignment::Center),
+                            Line::from(vec![
+                                Span::styled(" Ctrl+S: ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                                Span::raw("Generate Shares   "),
+                                Span::styled(" Esc: ", Style::default().fg(Color::Red)),
+                                Span::raw("Cancel"),
+                            ]).alignment(ratatui::layout::Alignment::Center),
+                        ]);
+                    } else {
+                        details.extend(vec![
+                            Line::from(vec![
+                                Span::styled(
+                                    "Total Shares (N):       ",
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled(
+                                    format!("{}", n_val),
+                                    Style::default()
+                                        .fg(Color::White)
+                                        .add_modifier(Modifier::BOLD),
+                                ),
+                            ])
+                            .alignment(ratatui::layout::Alignment::Center),
+                            Line::from(vec![
+                                Span::styled(
+                                    "Required Threshold (T): ",
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled(
+                                    format!("{}", t_val),
+                                    Style::default()
+                                        .fg(Color::White)
+                                        .add_modifier(Modifier::BOLD),
+                                ),
+                            ])
+                            .alignment(ratatui::layout::Alignment::Center),
+                            Line::from(""),
+                            Line::from(vec![Span::styled(
+                                " Press Enter / e to configure & generate shares ",
+                                Style::default().fg(Color::DarkGray),
+                            )])
+                            .alignment(ratatui::layout::Alignment::Center),
+                        ]);
+
+                        if !app.generated_shares.is_empty() {
+                            details.extend(vec![
+                                Line::from(""),
+                                Line::from("Generated Recovery Shares (Copy and distribute!):")
+                                    .fg(Color::Green)
+                                    .add_modifier(Modifier::BOLD),
+                                Line::from(""),
+                            ]);
+                            for (idx, share) in app.generated_shares.iter().enumerate() {
+                                details.push(Line::from(vec![
+                                    Span::styled(
+                                        format!("Share {} of {}: ", idx + 1, n_val),
+                                        Style::default().fg(Color::Cyan),
+                                    ),
+                                    Span::styled(share, Style::default().fg(Color::White)),
+                                ]));
+                            }
+                        }
+                    }
+
+                    f.render_widget(frame_block, content_area);
+                    f.render_widget(Paragraph::new(details), inner_area);
+                }
                 _ => {}
             }
         }
@@ -1318,6 +1466,18 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Span::styled(" y: ", Style::default().fg(Color::Cyan)),
             Span::styled("Yes, Delete ", Style::default().fg(Color::White)),
             Span::styled(" n/Esc: ", Style::default().fg(Color::Cyan)),
+        ],
+        AppMode::Login => vec![
+            Span::styled(" Enter: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Decrypt ", Style::default().fg(Color::White)),
+            Span::styled(" Ctrl+R: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Recovery Mode ", Style::default().fg(Color::White)),
+        ],
+        AppMode::Recovery => vec![
+            Span::styled(" Enter: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Submit Share ", Style::default().fg(Color::White)),
+            Span::styled(" Esc: ", Style::default().fg(Color::Cyan)),
+            Span::styled("Back to Login ", Style::default().fg(Color::White)),
         ],
     };
 
@@ -1599,4 +1759,182 @@ fn centered_rect_fixed(width: u16, height: u16, r: Rect) -> Rect {
             Constraint::Min(0),
         ])
         .split(popup_layout[1])[1]
+}
+
+fn draw_login(f: &mut Frame, app: &mut App) {
+    let area = centered_rect(60, 40, f.area());
+    let login_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(Span::styled(
+            " 🔒 Journal Locked ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let masked_password = "*".repeat(app.login_password.len());
+
+    let inner_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Spacer
+            Constraint::Length(3), // Input field
+            Constraint::Length(1), // Spacer
+            Constraint::Min(0),    // Error message & instructions
+        ])
+        .split(login_block.inner(area));
+
+    let input_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::White))
+        .title(" Master Password ");
+
+    let input_paragraph = Paragraph::new(format!(" {}█", masked_password)).block(input_block);
+
+    let mut instructions = vec![
+        Line::from("Press Enter to decrypt and open your journal."),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Press ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "Ctrl+R",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " to enter Recovery Mode",
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
+    ];
+
+    if let Some(ref err) = app.error_msg {
+        instructions.insert(
+            0,
+            Line::from(err.as_str())
+                .fg(Color::Red)
+                .add_modifier(Modifier::BOLD),
+        );
+        instructions.insert(1, Line::from(""));
+    }
+
+    let instructions_paragraph =
+        Paragraph::new(instructions).alignment(ratatui::layout::Alignment::Center);
+
+    f.render_widget(login_block, area);
+    f.render_widget(input_paragraph, inner_chunks[1]);
+    f.render_widget(instructions_paragraph, inner_chunks[3]);
+}
+
+fn draw_recovery(f: &mut Frame, app: &mut App) {
+    let area = centered_rect(80, 75, f.area());
+    let recovery_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::LightRed))
+        .title(Span::styled(
+            " 🚑 Recovery Mode (T-out-of-N) ",
+            Style::default()
+                .fg(Color::LightRed)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let inner_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2), // Header explanation
+            Constraint::Length(3), // Input field for pasting shares
+            Constraint::Length(1), // Spacer
+            Constraint::Min(0),    // List of entered shares
+            Constraint::Length(3), // Bottom instructions/status
+        ])
+        .split(recovery_block.inner(area));
+
+    let header = Paragraph::new(vec![
+        Line::from("Paste or type your recovery shares one by one below."),
+        Line::from("Once the required threshold is met, the journal will automatically unlock."),
+    ])
+    .alignment(ratatui::layout::Alignment::Center)
+    .fg(Color::DarkGray);
+
+    let input_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(" Enter / Paste Recovery Share ");
+
+    app.recovery_textarea.set_block(input_block);
+    app.recovery_textarea
+        .set_cursor_line_style(Style::default());
+
+    let mut share_lines = vec![
+        Line::from("Entered Shares:")
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+        Line::from(""),
+    ];
+
+    if app.recovery_shares.is_empty() {
+        share_lines.push(Line::from("  (No shares entered yet)").fg(Color::DarkGray));
+    } else {
+        for (idx, share) in app.recovery_shares.iter().enumerate() {
+            share_lines.push(Line::from(vec![
+                Span::styled(
+                    format!("  ✓ Share {}: ", idx + 1),
+                    Style::default().fg(Color::Green),
+                ),
+                Span::styled(share.as_str(), Style::default().fg(Color::White)),
+            ]));
+        }
+    }
+
+    let shares_paragraph = Paragraph::new(share_lines);
+
+    let mut footer_lines = vec![];
+    if let Some(ref status) = app.recovery_status_msg {
+        footer_lines.push(
+            Line::from(status.as_str())
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        );
+    } else if let Some(ref err) = app.error_msg {
+        footer_lines.push(
+            Line::from(err.as_str())
+                .fg(Color::Red)
+                .add_modifier(Modifier::BOLD),
+        );
+    } else {
+        footer_lines.push(Line::from(""));
+    }
+    footer_lines.push(Line::from(vec![
+        Span::styled("Press ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            "Enter",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" to submit share   ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            "Esc",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " to return to Login Screen",
+            Style::default().fg(Color::DarkGray),
+        ),
+    ]));
+
+    let footer_paragraph =
+        Paragraph::new(footer_lines).alignment(ratatui::layout::Alignment::Center);
+
+    f.render_widget(recovery_block, area);
+    f.render_widget(header, inner_chunks[0]);
+    f.render_widget(&app.recovery_textarea, inner_chunks[1]);
+    f.render_widget(shares_paragraph, inner_chunks[3]);
+    f.render_widget(footer_paragraph, inner_chunks[4]);
 }
