@@ -35,11 +35,15 @@ The binary will be at `target/release/journal-cli` (or `journal-cli.exe` on Wind
 ## Usage
 
 ```
-journal-cli <path-to-journal-file>
+journal-cli [JOURNAL_PATH]
 ```
 
-- If the file doesn't exist yet, you'll be prompted to set a master password and a new encrypted journal is created.
+`JOURNAL_PATH` defaults to `journal.jrnl` in the current directory if omitted.
+
+- If the file doesn't exist yet, you'll be prompted to set a master password and a new encrypted journal is created there.
 - If it exists, you'll be prompted to log in with your master password.
+
+Run `journal-cli --help` for the full option list, `journal-cli --version` for the version.
 
 ### Key bindings
 

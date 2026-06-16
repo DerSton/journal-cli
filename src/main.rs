@@ -5,6 +5,7 @@ mod model;
 mod ui;
 
 use app::{App, AppMode};
+use clap::{Parser, ValueHint};
 use crossterm::{
     event::{self, Event},
     execute,
@@ -12,40 +13,35 @@ use crossterm::{
 };
 use model::Journal;
 use ratatui::{Terminal, backend::CrosstermBackend};
-use std::env;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+const DEFAULT_JOURNAL_PATH: &str = "journal.jrnl";
+
+/// Encrypted personal journal, right in your terminal.
+#[derive(Parser)]
+#[command(name = "journal-cli", version, about, long_about = None)]
+struct Cli {
+    /// Path to the journal file. A new encrypted journal is created here if it doesn't exist yet.
+    #[arg(default_value = DEFAULT_JOURNAL_PATH, value_hint = ValueHint::FilePath)]
+    journal_path: PathBuf,
+}
+
+type JournalState = (Journal, [u8; crypto::SALT_SIZE], String, bool);
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: journal-cli <path_to_journal_file>");
-        std::process::exit(1);
-    }
-    let journal_path_str = &args[1];
-    let journal_path = Path::new(journal_path_str);
+    let cli = Cli::parse();
 
-    let (journal, salt, password, start_in_login) = if journal_path.exists() {
-        (
-            Journal::default(),
-            [0u8; crypto::SALT_SIZE],
-            String::new(),
-            true,
-        )
-    } else {
-        println!(
-            "No journal file found at '{}'. Setting up a new one.",
-            journal_path_str
-        );
-        let password = prompt_new_password()?;
-        match Journal::create_new(journal_path, &password) {
-            Ok((j, s)) => (j, s, password, false),
-            Err(e) => {
-                eprintln!("Failed to create new journal: {}", e);
-                std::process::exit(1);
-            }
+    let (journal, salt, password, start_in_login) = match load_or_create_journal(&cli.journal_path)
+    {
+        Ok(state) => state,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
         }
     };
+
+    let journal_path_str = cli.journal_path.to_string_lossy().into_owned();
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -53,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(journal, journal_path_str.clone(), password, salt);
+    let mut app = App::new(journal, journal_path_str, password, salt);
     if start_in_login {
         app.mode = AppMode::Login;
     }
@@ -64,22 +60,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     terminal.show_cursor()?;
 
     if let Err(e) = run_result {
-        eprintln!("Application error: {}", e);
+        eprintln!("Error: {e}");
     }
 
     Ok(())
 }
 
+/// Loads an existing journal's login state, or interactively creates a new one at `path`.
+fn load_or_create_journal(path: &Path) -> Result<JournalState, String> {
+    if path.exists() {
+        return Ok((
+            Journal::default(),
+            [0u8; crypto::SALT_SIZE],
+            String::new(),
+            true,
+        ));
+    }
+
+    println!("No journal found at '{}'.", path.display());
+    println!("Creating a new encrypted journal there.");
+    let password = prompt_new_password().map_err(|e| e.to_string())?;
+    let (journal, salt) = Journal::create_new(path, &password)?;
+    Ok((journal, salt, password, false))
+}
+
 fn prompt_new_password() -> Result<String, Box<dyn std::error::Error>> {
     loop {
-        let p1 = rpassword::prompt_password("Set Master Password: ")?;
-        let p2 = rpassword::prompt_password("Confirm Master Password: ")?;
+        let p1 = rpassword::prompt_password("Set master password: ")?;
+        let p2 = rpassword::prompt_password("Confirm master password: ")?;
         if p1 != p2 {
-            println!("Passwords do not match. Try again.");
+            println!("Passwords do not match, try again.");
             continue;
         }
         if p1.trim().is_empty() {
-            println!("Password cannot be empty. Try again.");
+            println!("Password cannot be empty, try again.");
             continue;
         }
         return Ok(p1);
