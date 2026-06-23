@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 
 $Repo = "DerSton/journal-cli"
 $BinaryName = "journal-cli.exe"
+$AliasName = "jnl.bat"
 $InstallDir = "$env:LOCALAPPDATA\journal-cli"
 $AssetName = "journal-cli-windows-x86_64.exe"
 
@@ -42,6 +43,7 @@ if (-not (Test-Path -Path $InstallDir)) {
 }
 
 $TargetPath = Join-Path $InstallDir $BinaryName
+$AliasPath = Join-Path $InstallDir $AliasName
 $TempPath = Join-Path $env:TEMP "journal-cli-temp.exe"
 
 Write-Host "Downloading latest version of journal-cli..." -ForegroundColor Gray
@@ -70,6 +72,15 @@ try {
     exit 1
 }
 
+# Create the jnl alias script (jnl.bat)
+try {
+    $BatchContent = "@echo off`r`njournal-cli.exe %*`r`n"
+    [System.IO.File]::WriteAllText($AliasPath, $BatchContent)
+    Write-Host "Created alias wrapper: jnl -> journal-cli.exe" -ForegroundColor Gray
+} catch {
+    Write-Host "Warning: Could not create jnl wrapper. You can still run journal-cli directly." -ForegroundColor Yellow
+}
+
 Write-Host "Successfully installed/updated journal-cli to $TargetPath" -ForegroundColor Green
 
 # Add to PATH if not already present
@@ -90,4 +101,3 @@ if (-not $PathExists) {
 }
 
 # Finished
-

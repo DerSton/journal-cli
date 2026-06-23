@@ -3,7 +3,7 @@
 A private, encrypted journal you keep in a terminal. Single binary, single file, no server, no cloud.
 
 ```
-journal-cli my-journal.jrnl
+jnl my-journal.jrnl
 ```
 
 ## Features
@@ -17,6 +17,8 @@ journal-cli my-journal.jrnl
 - **Transactional saves** — password changes and journal writes go through a temp-file + rename, so a crash mid-write can't corrupt your journal.
 
 ## Installation
+
+The installer scripts download the `journal-cli` binary and automatically configure a convenient `jnl` alias for you. You can run the journal using either `journal-cli` or `jnl`.
 
 ### Shell Script (Linux)
 
@@ -51,7 +53,7 @@ The binary will be at `target/release/journal-cli` (or `journal-cli.exe` on Wind
 ## Usage
 
 ```
-journal-cli [JOURNAL_PATH]
+jnl [JOURNAL_PATH]
 ```
 
 `JOURNAL_PATH` defaults to `journal.jrnl` in the current directory if omitted.
@@ -59,7 +61,7 @@ journal-cli [JOURNAL_PATH]
 - If the file doesn't exist yet, you'll be prompted to set a master password and a new encrypted journal is created there.
 - If it exists, you'll be prompted to log in with your master password.
 
-Run `journal-cli --help` for the full option list, `journal-cli --version` for the version.
+Run `jnl --help` for the full option list, `jnl --version` for the version.
 
 ### Key bindings
 

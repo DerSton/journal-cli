@@ -6,6 +6,7 @@ set -e
 # Configuration
 REPO="DerSton/journal-cli"
 BINARY_NAME="journal-cli"
+ALIAS_NAME="jnl"
 INSTALL_DIR="$HOME/.local/bin"
 
 echo "=== journal-cli Installer ==="
@@ -69,7 +70,11 @@ chmod +x "$TEMP_FILE"
 # Move binary to install directory
 mv "$TEMP_FILE" "$INSTALL_DIR/$BINARY_NAME"
 
-echo "Successfully installed/updated journal-cli to $INSTALL_DIR/$BINARY_NAME"
+# Create symlink for jnl alias
+echo "Creating alias link: $ALIAS_NAME -> $BINARY_NAME"
+ln -sf "$BINARY_NAME" "$INSTALL_DIR/$ALIAS_NAME"
+
+echo "Successfully installed/updated journal-cli (with '$ALIAS_NAME' alias) to $INSTALL_DIR/$BINARY_NAME"
 
 # Check if PATH contains install directory
 case ":$PATH:" in
@@ -79,10 +84,10 @@ case ":$PATH:" in
     *)
         echo ""
         echo "Warning: $INSTALL_DIR is not in your PATH."
-        echo "To run journal-cli from anywhere, add it to your shell configuration file (e.g., ~/.bashrc or ~/.zshrc):"
+        echo "To run jnl or journal-cli from anywhere, add it to your shell configuration file (e.g., ~/.bashrc or ~/.zshrc):"
         echo "  export PATH=\"\$PATH:$INSTALL_DIR\""
         echo ""
         ;;
 esac
 
-echo "Run 'journal-cli --help' to verify the installation."
+echo "Run 'jnl --help' or 'journal-cli --help' to verify the installation."
