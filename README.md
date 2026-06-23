@@ -18,7 +18,23 @@ journal-cli my-journal.jrnl
 
 ## Installation
 
-### Download a release
+### Shell Script (Linux)
+
+Install or update to the latest version by running:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DerSton/journal-cli/main/install.sh | bash
+```
+
+### PowerShell (Windows)
+
+Open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/DerSton/journal-cli/main/install.ps1 | iex
+```
+
+### Manual Download
 
 Grab a prebuilt binary from the [Releases](https://github.com/DerSton/journal-cli/releases) page (Linux x86_64, Windows x86_64).
 
