@@ -17,17 +17,43 @@ pub struct Journal {
     pub settings: Settings,
 }
 
+fn get_system_locale() -> chrono::format::Locale {
+    if let Some(locale_str) = sys_locale::get_locale() {
+        let normalized = locale_str.replace('-', "_");
+        if let Ok(locale) = normalized.parse::<chrono::format::Locale>() {
+            return locale;
+        }
+        if let Some(locale) = normalized
+            .find('_')
+            .and_then(|pos| normalized[..pos].parse::<chrono::format::Locale>().ok())
+        {
+            return locale;
+        }
+    }
+    chrono::format::Locale::POSIX
+}
+
 impl Journal {
     pub fn format_timestamp(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
-        timestamp.format("%A, %B %d, %Y - %H:%M:%S").to_string()
+        let local_dt = timestamp.with_timezone(&chrono::Local);
+        let locale = get_system_locale();
+        local_dt
+            .format_localized("%A, %B %d, %Y - %H:%M:%S", locale)
+            .to_string()
     }
 
     pub fn format_timestamp_short(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
-        timestamp.format("%Y-%m-%d %H:%M:%S").to_string()
+        let local_dt = timestamp.with_timezone(&chrono::Local);
+        let locale = get_system_locale();
+        local_dt
+            .format_localized("%Y-%m-%d %H:%M:%S", locale)
+            .to_string()
     }
 
     pub fn format_date_short(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
-        timestamp.format("%Y-%m-%d").to_string()
+        let local_dt = timestamp.with_timezone(&chrono::Local);
+        let locale = get_system_locale();
+        local_dt.format_localized("%Y-%m-%d", locale).to_string()
     }
 
     /// Load and decrypt a journal file using the provided password.
@@ -126,8 +152,9 @@ mod tests {
         let journal = Journal::default();
         let dt = chrono::Utc.with_ymd_and_hms(2026, 6, 16, 12, 0, 0).unwrap();
         let formatted = journal.format_timestamp(&dt);
-        assert!(formatted.contains("Tuesday"));
-        assert!(formatted.contains("June"));
-        assert!(formatted.contains("12:00:00"));
+        let local_dt = dt.with_timezone(&chrono::Local);
+        let expected_hour = local_dt.format("%H:%M:%S").to_string();
+        assert!(formatted.contains("2026"));
+        assert!(formatted.contains(&expected_hour));
     }
 }
