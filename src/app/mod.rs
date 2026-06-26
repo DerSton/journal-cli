@@ -12,6 +12,7 @@ use ratatui_textarea::TextArea;
 pub enum Tab {
     Journal,
     Contacts,
+    Stats,
     Settings,
 }
 
@@ -166,6 +167,7 @@ impl App {
             Tab::Journal => self.filtered_entries().len(),
             Tab::Contacts => self.filtered_contacts().len(),
             Tab::Settings => SETTINGS_GROUPS.len(),
+            Tab::Stats => 0,
         }
     }
 

@@ -3,6 +3,7 @@ mod contacts_tab;
 mod journal_tab;
 mod modals;
 mod settings_tab;
+mod stats_tab;
 mod theme;
 
 use crate::app::{App, AppMode, Tab};
@@ -33,31 +34,37 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     draw_tab_bar(f, app, chunks[0]);
 
-    let main_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
-        .split(chunks[1]);
-    let list_area = main_chunks[0];
-    let content_area = main_chunks[1];
-    let is_searchable_tab = matches!(app.active_tab, Tab::Journal | Tab::Contacts);
-    let list_area =
-        if is_searchable_tab && (app.mode == AppMode::Search || !app.search_query.is_empty()) {
-            let list_layout = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Length(3), Constraint::Min(0)])
-                .split(list_area);
+    let main_area = chunks[1];
+    if app.active_tab == Tab::Stats {
+        stats_tab::draw(f, app, main_area);
+    } else {
+        let main_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
+            .split(main_area);
+        let list_area = main_chunks[0];
+        let content_area = main_chunks[1];
+        let is_searchable_tab = matches!(app.active_tab, Tab::Journal | Tab::Contacts);
+        let list_area =
+            if is_searchable_tab && (app.mode == AppMode::Search || !app.search_query.is_empty()) {
+                let list_layout = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Length(3), Constraint::Min(0)])
+                    .split(list_area);
 
-            draw_search_box(f, app, list_layout[0]);
+                draw_search_box(f, app, list_layout[0]);
 
-            list_layout[1]
-        } else {
-            list_area
-        };
+                list_layout[1]
+            } else {
+                list_area
+            };
 
-    match app.active_tab {
-        Tab::Journal => journal_tab::draw(f, app, list_area, content_area),
-        Tab::Contacts => contacts_tab::draw(f, app, list_area, content_area),
-        Tab::Settings => settings_tab::draw(f, app, list_area, content_area),
+        match app.active_tab {
+            Tab::Journal => journal_tab::draw(f, app, list_area, content_area),
+            Tab::Contacts => contacts_tab::draw(f, app, list_area, content_area),
+            Tab::Settings => settings_tab::draw(f, app, list_area, content_area),
+            Tab::Stats => {}
+        }
     }
 
     draw_status_bar(f, app, chunks[2]);
@@ -82,8 +89,10 @@ fn draw_tab_bar(f: &mut Frame, app: &App, area: Rect) {
         Span::styled(" | ", theme::muted_style()),
         tab_span("Contacts [2]", Tab::Contacts),
         Span::styled(" | ", theme::muted_style()),
-        tab_span("Settings [3]", Tab::Settings),
-        Span::styled("   (Tab or 1-3 to switch)", theme::muted_style()),
+        tab_span("Stats [3]", Tab::Stats),
+        Span::styled(" | ", theme::muted_style()),
+        tab_span("Settings [4]", Tab::Settings),
+        Span::styled("   (Tab or 1-4 to switch)", theme::muted_style()),
     ]);
 
     f.render_widget(Paragraph::new(line).block(theme::panel_block("")), area);
@@ -140,6 +149,7 @@ fn help_hints(app: &App) -> Vec<Span<'static>> {
                         spans.extend(hint("Up/Down", "Select group"));
                         spans.extend(hint("Enter", "Open"));
                     }
+                    Tab::Stats => {}
                 }
                 spans.extend(hint("Tab", "Switch tab"));
                 spans.extend(hint("q", "Quit"));
@@ -156,7 +166,7 @@ fn help_hints(app: &App) -> Vec<Span<'static>> {
                 spans.extend(hint("Ctrl+S", "Save"));
                 spans.extend(hint("Esc", "Cancel"));
             }
-            Tab::Settings => {}
+            Tab::Settings | Tab::Stats => {}
         },
         AppMode::ContactPicker { .. } => {
             spans.extend(hint("Up/Down", "Select contact"));

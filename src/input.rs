@@ -39,14 +39,16 @@ fn handle_list(app: &mut App, key: KeyEvent) {
         KeyCode::Tab => {
             let next = match app.active_tab {
                 Tab::Journal => Tab::Contacts,
-                Tab::Contacts => Tab::Settings,
+                Tab::Contacts => Tab::Stats,
+                Tab::Stats => Tab::Settings,
                 Tab::Settings => Tab::Journal,
             };
             app.switch_tab(next);
         }
         KeyCode::Char('1') => app.switch_tab(Tab::Journal),
         KeyCode::Char('2') => app.switch_tab(Tab::Contacts),
-        KeyCode::Char('3') => app.switch_tab(Tab::Settings),
+        KeyCode::Char('3') => app.switch_tab(Tab::Stats),
+        KeyCode::Char('4') => app.switch_tab(Tab::Settings),
         KeyCode::Up | KeyCode::Char('k') => {
             if app.selected_index > 0 {
                 app.selected_index -= 1;
@@ -79,7 +81,7 @@ fn handle_list(app: &mut App, key: KeyEvent) {
                     app.mode = AppMode::Writing { is_edit: false };
                 }
                 Tab::Contacts => app.init_contact_form(false),
-                Tab::Settings => {}
+                Tab::Settings | Tab::Stats => {}
             }
         }
         KeyCode::Char('e') | KeyCode::Enter => {
@@ -104,13 +106,14 @@ fn handle_list(app: &mut App, key: KeyEvent) {
                     app.settings_panel_focused = true;
                     app.settings_active_field = 0;
                 }
+                Tab::Stats => {}
             }
         }
         KeyCode::Char('d') | KeyCode::Delete | KeyCode::Esc => {
             let is_empty = match app.active_tab {
                 Tab::Journal => app.journal.entries.is_empty(),
                 Tab::Contacts => app.journal.contacts.is_empty(),
-                Tab::Settings => true,
+                Tab::Settings | Tab::Stats => true,
             };
             if key.code == KeyCode::Esc {
                 app.should_quit = true;
@@ -251,7 +254,7 @@ fn handle_writing(app: &mut App, key: KeyEvent, is_edit: bool) {
             }
         }
         Tab::Contacts => handle_contact_form(app, key, is_edit),
-        Tab::Settings => {}
+        Tab::Settings | Tab::Stats => {}
     }
 }
 
@@ -414,7 +417,7 @@ fn handle_delete_confirm(app: &mut App, key: KeyEvent) {
         KeyCode::Char('y') | KeyCode::Char('Y') => match app.active_tab {
             Tab::Journal => app.delete_selected_entry(),
             Tab::Contacts => app.delete_selected_contact(),
-            Tab::Settings => {}
+            Tab::Settings | Tab::Stats => {}
         },
         KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => app.mode = AppMode::List,
         _ => {}

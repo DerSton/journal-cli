@@ -32,6 +32,7 @@ fn draw_delete_confirm(f: &mut Frame, app: &App) {
         Tab::Journal => "journal entry",
         Tab::Contacts => "contact",
         Tab::Settings => "setting",
+        Tab::Stats => "stat",
     };
 
     let block = ratatui::widgets::Block::default()
