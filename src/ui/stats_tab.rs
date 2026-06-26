@@ -7,6 +7,23 @@ use ratatui::{
     text::{Line, Span},
     widgets::{BarChart, Paragraph, Wrap},
 };
+use std::collections::HashMap;
+
+const STOP_WORDS: &[&str] = &[
+    // Deutsch
+    "ich", "du", "er", "sie", "es", "wir", "ihr", "mein", "dein", "sein", "ihr", "unser", "ein",
+    "eine", "einer", "eines", "einem", "einen", "der", "die", "das", "den", "dem", "des", "und",
+    "oder", "aber", "so", "ja", "nein", "ist", "sind", "war", "waren", "mit", "von", "zu", "in",
+    "auf", "im", "am", "für", "um", "als", "wie", "dass", "mir", "mich", "dir", "dich", "uns",
+    "euch", "sich", "nicht", "nur", "auch", "noch", "schon", "jetzt", "dann", "da", "hier",
+    "heute", "morgen", "gestern", "mal", "habe", "hat", "haben", "hatte", "wurde", "werden",
+    // Englisch
+    "i", "you", "he", "she", "it", "we", "they", "my", "your", "his", "her", "its", "our", "their",
+    "a", "an", "the", "and", "or", "but", "so", "yes", "no", "is", "are", "was", "were", "with",
+    "from", "to", "in", "on", "at", "for", "of", "about", "as", "like", "that", "me", "him", "us",
+    "them", "not", "only", "also", "now", "then", "there", "here", "today", "have", "has", "had",
+    "been", "would", "could", "should", "will", "can", "this", "these", "those",
+];
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let entries = &app.journal.entries;
@@ -36,6 +53,9 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     // Top-Kontakte berechnen
     let top_contacts = calculate_top_contacts(app);
 
+    // Häufigste Wörter berechnen
+    let common_words = calculate_common_words(entries);
+
     // Layout erstellen
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -46,6 +66,11 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[0]);
+
+    let bottom_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
 
     // Spalte 1: Allgemeine KPIs
     let mut kpi_lines = vec![
@@ -128,7 +153,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         .wrap(Wrap { trim: true });
     f.render_widget(contact_paragraph, top_chunks[1]);
 
-    // Untere Hälfte: Wortanzahl-Diagramm der letzten 7 Einträge
+    // Untere Reihe links: Wortanzahl-Diagramm der letzten 7 Einträge
     let last_entries: Vec<_> = app.filtered_entries().iter().take(7).cloned().collect();
     let mut word_data = Vec::new();
     for entry in last_entries.iter().rev() {
@@ -151,18 +176,45 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 .alignment(ratatui::layout::Alignment::Center),
         ])
         .block(chart_block);
-        f.render_widget(empty_p, chunks[1]);
+        f.render_widget(empty_p, bottom_chunks[0]);
     } else {
         let chart = BarChart::default()
             .block(chart_block)
             .data(&bar_data)
-            .bar_width(8)
+            .bar_width(6)
             .bar_gap(2)
             .value_style(theme::text_style())
             .label_style(theme::title_style())
             .bar_style(ratatui::style::Style::default().fg(theme::ACCENT));
-        f.render_widget(chart, chunks[1]);
+        f.render_widget(chart, bottom_chunks[0]);
     }
+
+    // Untere Reihe rechts: Wortwolke
+    let mut cloud_spans = Vec::new();
+    if common_words.is_empty() {
+        cloud_spans.push(Span::styled(" No words found yet.", theme::muted_style()));
+    } else {
+        for (i, (word, count)) in common_words.iter().enumerate() {
+            if i > 0 {
+                cloud_spans.push(Span::styled("  •  ", theme::muted_style()));
+            }
+
+            let style = if i < 3 {
+                theme::title_style().add_modifier(ratatui::style::Modifier::UNDERLINED)
+            } else if i < 6 {
+                theme::text_style().add_modifier(ratatui::style::Modifier::BOLD)
+            } else {
+                theme::muted_style()
+            };
+
+            cloud_spans.push(Span::styled(format!("{} ({})", word, count), style));
+        }
+    }
+
+    let cloud_paragraph = Paragraph::new(Line::from(cloud_spans))
+        .block(theme::panel_block("Common Words (Cloud)"))
+        .wrap(Wrap { trim: true });
+    f.render_widget(cloud_paragraph, bottom_chunks[1]);
 }
 
 fn calculate_streaks(entries: &[crate::model::JournalEntry]) -> (u32, u32) {
@@ -229,4 +281,34 @@ fn calculate_top_contacts(app: &App) -> Vec<(&crate::model::Contact, usize)> {
     }
     counts.sort_by(|a, b| b.1.cmp(&a.1));
     counts.into_iter().take(5).collect()
+}
+
+fn calculate_common_words(entries: &[crate::model::JournalEntry]) -> Vec<(String, usize)> {
+    let mut counts = HashMap::new();
+    for entry in entries {
+        let cleaned: String = entry
+            .content
+            .chars()
+            .map(|c| {
+                if c.is_alphabetic() {
+                    c.to_lowercase().to_string()
+                } else if c.is_whitespace() {
+                    " ".to_string()
+                } else {
+                    "".to_string()
+                }
+            })
+            .collect();
+
+        for word in cleaned.split_whitespace() {
+            if word.len() > 2 && !STOP_WORDS.contains(&word) {
+                *counts.entry(word.to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+
+    let mut list: Vec<(String, usize)> = counts.into_iter().collect();
+    list.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    list.truncate(10);
+    list
 }
