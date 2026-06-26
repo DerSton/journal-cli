@@ -24,7 +24,10 @@ impl App {
                 self.status_msg = Some("New entry saved".to_string());
             }
             AppMode::Writing { is_edit: true } => {
-                if let Some(entry) = self.journal.entries.get_mut(self.selected_index) {
+                if let Some(entry) = self
+                    .selected_entry_idx()
+                    .and_then(|idx| self.journal.entries.get_mut(idx))
+                {
                     entry.content = content;
                     self.status_msg = Some("Entry updated".to_string());
                 }
@@ -42,12 +45,15 @@ impl App {
     }
 
     pub fn delete_selected_entry(&mut self) {
-        if self.journal.entries.is_empty() || self.selected_index >= self.journal.entries.len() {
-            self.mode = AppMode::List;
-            return;
-        }
+        let real_idx = match self.selected_entry_idx() {
+            Some(idx) => idx,
+            None => {
+                self.mode = AppMode::List;
+                return;
+            }
+        };
 
-        self.journal.entries.remove(self.selected_index);
+        self.journal.entries.remove(real_idx);
 
         if let Err(e) = self.save_journal() {
             self.error_msg = Some(format!("Delete write failed: {}", e));
@@ -56,10 +62,11 @@ impl App {
             self.error_msg = None;
         }
 
-        if self.journal.entries.is_empty() {
+        let len = self.filtered_entries().len();
+        if len == 0 {
             self.selected_index = 0;
-        } else if self.selected_index >= self.journal.entries.len() {
-            self.selected_index = self.journal.entries.len() - 1;
+        } else if self.selected_index >= len {
+            self.selected_index = len - 1;
         }
 
         self.mode = AppMode::List;

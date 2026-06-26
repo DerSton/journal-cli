@@ -20,6 +20,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         AppMode::Login => handle_login(app, key),
         AppMode::Recovery => handle_recovery(app, key),
         AppMode::RecoveryReset => handle_recovery_reset(app, key),
+        AppMode::Search => handle_search(app, key),
     }
 }
 
@@ -31,6 +32,10 @@ fn handle_list(app: &mut App, key: KeyEvent) {
 
     match key.code {
         KeyCode::Char('q') => app.should_quit = true,
+        KeyCode::Char('/') if matches!(app.active_tab, Tab::Journal | Tab::Contacts) => {
+            app.mode = AppMode::Search;
+            app.selected_index = 0;
+        }
         KeyCode::Tab => {
             let next = match app.active_tab {
                 Tab::Journal => Tab::Contacts,
@@ -551,4 +556,27 @@ fn handle_recovery_reset(app: &mut App, key: KeyEvent) {
             app.sort_contacts();
         },
     );
+}
+
+fn handle_search(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc => {
+            app.search_query.clear();
+            app.selected_index = 0;
+            app.mode = AppMode::List;
+        }
+        KeyCode::Enter => {
+            app.selected_index = 0;
+            app.mode = AppMode::List;
+        }
+        KeyCode::Backspace => {
+            app.search_query.pop();
+            app.selected_index = 0;
+        }
+        KeyCode::Char(c) => {
+            app.search_query.push(c);
+            app.selected_index = 0;
+        }
+        _ => {}
+    }
 }

@@ -19,9 +19,8 @@ pub fn draw(f: &mut Frame, app: &mut App, list_area: Rect, content_area: Rect) {
 }
 
 fn draw_list(f: &mut Frame, app: &App, area: Rect) {
-    let items: Vec<ListItem> = app
-        .journal
-        .contacts
+    let filtered = app.filtered_contacts();
+    let items: Vec<ListItem> = filtered
         .iter()
         .enumerate()
         .map(|(i, contact)| {
@@ -37,25 +36,27 @@ fn draw_list(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    let block = theme::panel_block(format!("Contacts ({})", app.journal.contacts.len()));
+    let block = theme::panel_block(format!("Contacts ({})", filtered.len()));
     let list = List::new(items)
         .block(block)
         .highlight_style(theme::list_highlight_style());
 
     let mut state = ListState::default();
-    if !app.journal.contacts.is_empty() {
+    if !filtered.is_empty() {
         state.select(Some(app.selected_index));
     }
     f.render_stateful_widget(list, area, &mut state);
 }
 
 fn draw_profile(f: &mut Frame, app: &App, area: Rect) {
-    if app.journal.contacts.is_empty() {
-        let text = vec![
-            Line::from(""),
-            Line::from("No contacts yet.").alignment(Alignment::Center),
-            Line::from("Press 'n' to add one.").alignment(Alignment::Center),
-        ];
+    let filtered = app.filtered_contacts();
+    if filtered.is_empty() {
+        let msg = if !app.search_query.is_empty() {
+            "No contacts found matching search."
+        } else {
+            "No contacts yet. Press 'n' to add one."
+        };
+        let text = vec![Line::from(""), Line::from(msg).alignment(Alignment::Center)];
         let paragraph = Paragraph::new(text)
             .block(theme::panel_block("Contact"))
             .wrap(Wrap { trim: true });
@@ -63,7 +64,7 @@ fn draw_profile(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    let contact = &app.journal.contacts[app.selected_index];
+    let contact = filtered[app.selected_index];
     let splits = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])

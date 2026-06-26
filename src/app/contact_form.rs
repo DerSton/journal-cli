@@ -402,11 +402,12 @@ impl App {
     /// contact's data for editing.
     pub fn init_contact_form(&mut self, is_edit: bool) {
         self.error_msg = None;
-        self.contact_form = if is_edit
-            && !self.journal.contacts.is_empty()
-            && self.selected_index < self.journal.contacts.len()
-        {
-            ContactForm::from_contact(&self.journal.contacts[self.selected_index])
+        self.contact_form = if is_edit {
+            if let Some(real_idx) = self.selected_contact_idx() {
+                ContactForm::from_contact(&self.journal.contacts[real_idx])
+            } else {
+                ContactForm::empty()
+            }
         } else {
             ContactForm::empty()
         };
@@ -415,15 +416,18 @@ impl App {
 
     /// Validates the contact form and saves it (creating or updating), persisting to disk.
     pub fn save_contact(&mut self) {
-        let id = match self.mode {
-            super::AppMode::Writing { is_edit: false } => Uuid::new_v4().to_string(),
-            super::AppMode::Writing { is_edit: true } => {
-                match self.journal.contacts.get(self.selected_index) {
-                    Some(contact) => contact.id.clone(),
-                    None => return,
-                }
+        let real_idx = if let super::AppMode::Writing { is_edit: true } = self.mode {
+            match self.selected_contact_idx() {
+                Some(idx) => Some(idx),
+                None => return,
             }
-            _ => return,
+        } else {
+            None
+        };
+
+        let id = match real_idx {
+            None => Uuid::new_v4().to_string(),
+            Some(idx) => self.journal.contacts[idx].id.clone(),
         };
 
         let contact = match self.contact_form.to_contact(id) {
@@ -434,19 +438,15 @@ impl App {
             }
         };
 
-        match self.mode {
-            super::AppMode::Writing { is_edit: false } => {
-                self.journal.contacts.push(contact);
-                self.sort_contacts();
-                self.selected_index = 0;
-                self.status_msg = Some("New contact saved".to_string());
-            }
-            super::AppMode::Writing { is_edit: true } => {
-                self.journal.contacts[self.selected_index] = contact;
-                self.sort_contacts();
-                self.status_msg = Some("Contact updated".to_string());
-            }
-            _ => return,
+        if let Some(idx) = real_idx {
+            self.journal.contacts[idx] = contact;
+            self.sort_contacts();
+            self.status_msg = Some("Contact updated".to_string());
+        } else {
+            self.journal.contacts.push(contact);
+            self.sort_contacts();
+            self.selected_index = 0;
+            self.status_msg = Some("New contact saved".to_string());
         }
 
         if let Err(e) = self.save_journal() {
@@ -459,12 +459,15 @@ impl App {
     }
 
     pub fn delete_selected_contact(&mut self) {
-        if self.journal.contacts.is_empty() || self.selected_index >= self.journal.contacts.len() {
-            self.mode = super::AppMode::List;
-            return;
-        }
+        let real_idx = match self.selected_contact_idx() {
+            Some(idx) => idx,
+            None => {
+                self.mode = super::AppMode::List;
+                return;
+            }
+        };
 
-        self.journal.contacts.remove(self.selected_index);
+        self.journal.contacts.remove(real_idx);
 
         if let Err(e) = self.save_journal() {
             self.error_msg = Some(format!("Delete write failed: {}", e));
@@ -473,10 +476,11 @@ impl App {
             self.error_msg = None;
         }
 
-        if self.journal.contacts.is_empty() {
+        let len = self.filtered_contacts().len();
+        if len == 0 {
             self.selected_index = 0;
-        } else if self.selected_index >= self.journal.contacts.len() {
-            self.selected_index = self.journal.contacts.len() - 1;
+        } else if self.selected_index >= len {
+            self.selected_index = len - 1;
         }
 
         self.mode = super::AppMode::List;

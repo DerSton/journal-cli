@@ -46,6 +46,7 @@ pub enum AppMode {
     Login,
     Recovery,
     RecoveryReset,
+    Search,
 }
 
 pub struct App {
@@ -85,6 +86,7 @@ pub struct App {
     pub error_msg: Option<String>,
     pub status_msg: Option<String>,
     pub should_quit: bool,
+    pub search_query: String,
 }
 
 impl App {
@@ -119,6 +121,7 @@ impl App {
             error_msg: None,
             status_msg: Some("Welcome to your secure journal.".to_string()),
             should_quit: false,
+            search_query: String::new(),
         };
         app.sort_entries();
         app.sort_contacts();
@@ -160,9 +163,65 @@ impl App {
 
     pub fn list_len(&self) -> usize {
         match self.active_tab {
-            Tab::Journal => self.journal.entries.len(),
-            Tab::Contacts => self.journal.contacts.len(),
+            Tab::Journal => self.filtered_entries().len(),
+            Tab::Contacts => self.filtered_contacts().len(),
             Tab::Settings => SETTINGS_GROUPS.len(),
+        }
+    }
+
+    pub fn filtered_entries(&self) -> Vec<&crate::model::JournalEntry> {
+        if self.search_query.trim().is_empty() {
+            self.journal.entries.iter().collect()
+        } else {
+            let query = self.search_query.to_lowercase();
+            self.journal
+                .entries
+                .iter()
+                .filter(|entry| entry.content.to_lowercase().contains(&query))
+                .collect()
+        }
+    }
+
+    pub fn filtered_contacts(&self) -> Vec<&crate::model::Contact> {
+        if self.search_query.trim().is_empty() {
+            self.journal.contacts.iter().collect()
+        } else {
+            let query = self.search_query.to_lowercase();
+            self.journal
+                .contacts
+                .iter()
+                .filter(|c| {
+                    c.full_name().to_lowercase().contains(&query)
+                        || c.nickname.to_lowercase().contains(&query)
+                        || c.notes.to_lowercase().contains(&query)
+                })
+                .collect()
+        }
+    }
+
+    pub fn selected_entry_idx(&self) -> Option<usize> {
+        let filtered = self.filtered_entries();
+        if filtered.is_empty() {
+            None
+        } else {
+            let selected = filtered.get(self.selected_index)?;
+            self.journal
+                .entries
+                .iter()
+                .position(|e| e.id == selected.id)
+        }
+    }
+
+    pub fn selected_contact_idx(&self) -> Option<usize> {
+        let filtered = self.filtered_contacts();
+        if filtered.is_empty() {
+            None
+        } else {
+            let selected = filtered.get(self.selected_index)?;
+            self.journal
+                .contacts
+                .iter()
+                .position(|c| c.id == selected.id)
         }
     }
 

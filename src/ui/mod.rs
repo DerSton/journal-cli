@@ -39,6 +39,20 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         .split(chunks[1]);
     let list_area = main_chunks[0];
     let content_area = main_chunks[1];
+    let is_searchable_tab = matches!(app.active_tab, Tab::Journal | Tab::Contacts);
+    let list_area =
+        if is_searchable_tab && (app.mode == AppMode::Search || !app.search_query.is_empty()) {
+            let list_layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(3), Constraint::Min(0)])
+                .split(list_area);
+
+            draw_search_box(f, app, list_layout[0]);
+
+            list_layout[1]
+        } else {
+            list_area
+        };
 
     match app.active_tab {
         Tab::Journal => journal_tab::draw(f, app, list_area, content_area),
@@ -110,12 +124,14 @@ fn help_hints(app: &App) -> Vec<Span<'static>> {
             } else {
                 match app.active_tab {
                     Tab::Journal => {
+                        spans.extend(hint("/", "Search"));
                         spans.extend(hint("n", "New entry"));
                         spans.extend(hint("e", "Edit"));
                         spans.extend(hint("d", "Delete"));
                         spans.extend(hint("PgUp/PgDn", "Scroll preview"));
                     }
                     Tab::Contacts => {
+                        spans.extend(hint("/", "Search"));
                         spans.extend(hint("n", "New contact"));
                         spans.extend(hint("e", "Edit"));
                         spans.extend(hint("d", "Delete"));
@@ -160,6 +176,10 @@ fn help_hints(app: &App) -> Vec<Span<'static>> {
             spans.extend(hint("n / Esc", "Cancel"));
         }
         AppMode::Login | AppMode::Recovery | AppMode::RecoveryReset => {}
+        AppMode::Search => {
+            spans.extend(hint("Enter", "Lock search"));
+            spans.extend(hint("Esc", "Clear search"));
+        }
     }
     spans
 }
@@ -204,4 +224,18 @@ pub(crate) fn centered_rect_fixed(width: u16, height: u16, r: Rect) -> Rect {
             Constraint::Min(0),
         ])
         .split(vertical[1])[1]
+}
+
+fn draw_search_box(f: &mut Frame, app: &App, area: Rect) {
+    let focused = app.mode == AppMode::Search;
+    let block = theme::field_block("Search (Enter to lock, Esc to clear)", focused);
+
+    let display_str = if focused {
+        format!("{}_", app.search_query)
+    } else {
+        app.search_query.clone()
+    };
+
+    let p = Paragraph::new(Line::from(Span::styled(display_str, theme::text_style()))).block(block);
+    f.render_widget(p, area);
 }

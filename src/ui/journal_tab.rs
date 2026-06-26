@@ -20,9 +20,8 @@ pub fn draw(f: &mut Frame, app: &mut App, list_area: Rect, content_area: Rect) {
 }
 
 fn draw_list(f: &mut Frame, app: &App, area: Rect) {
-    let items: Vec<ListItem> = app
-        .journal
-        .entries
+    let filtered = app.filtered_entries();
+    let items: Vec<ListItem> = filtered
         .iter()
         .enumerate()
         .map(|(i, entry)| {
@@ -43,13 +42,13 @@ fn draw_list(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    let block = theme::panel_block(format!("Journal Entries ({})", app.journal.entries.len()));
+    let block = theme::panel_block(format!("Journal Entries ({})", filtered.len()));
     let list = List::new(items)
         .block(block)
         .highlight_style(theme::list_highlight_style());
 
     let mut state = ListState::default();
-    if !app.journal.entries.is_empty() {
+    if !filtered.is_empty() {
         state.select(Some(app.selected_index));
     }
     f.render_stateful_widget(list, area, &mut state);
@@ -65,11 +64,16 @@ fn draw_editor(f: &mut Frame, app: &mut App, area: Rect, is_edit: bool) {
 }
 
 fn draw_preview(f: &mut Frame, app: &mut App, area: Rect) {
-    if app.journal.entries.is_empty() {
+    let filtered = app.filtered_entries();
+    if filtered.is_empty() {
+        let msg = if !app.search_query.is_empty() {
+            "No entries found matching search."
+        } else {
+            "No entries yet. Press 'n' to write one."
+        };
         let text = vec![
             Line::from(""),
-            Line::from("No entries yet.").alignment(ratatui::layout::Alignment::Center),
-            Line::from("Press 'n' to write one.").alignment(ratatui::layout::Alignment::Center),
+            Line::from(msg).alignment(ratatui::layout::Alignment::Center),
         ];
         let paragraph = Paragraph::new(text)
             .block(theme::panel_block("Entry"))
@@ -78,14 +82,10 @@ fn draw_preview(f: &mut Frame, app: &mut App, area: Rect) {
         return;
     }
 
-    let entry = &app.journal.entries[app.selected_index];
+    let entry = filtered[app.selected_index];
     let time_str = app.journal.format_timestamp(&entry.timestamp);
 
-    let title = format!(
-        "Entry {} of {}",
-        app.selected_index + 1,
-        app.journal.entries.len()
-    );
+    let title = format!("Entry {} of {}", app.selected_index + 1, filtered.len());
 
     let mut lines = vec![
         Line::from(vec![
