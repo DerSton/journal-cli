@@ -282,15 +282,18 @@ fn draw_form(f: &mut Frame, app: &mut App, area: Rect, is_edit: bool) {
         let field_bottom = cursor + h;
         cursor += h;
 
-        if field_bottom <= scroll || field_top >= scroll + viewport {
+        let visible_top = field_top.max(scroll);
+        let visible_bottom = field_bottom.min(scroll + viewport);
+
+        if visible_bottom <= visible_top {
             continue;
         }
 
         let rect = Rect {
             x: inner.x,
-            y: inner.y + (field_top - scroll),
+            y: inner.y + (visible_top - scroll),
             width: inner.width,
-            height: h,
+            height: visible_bottom - visible_top,
         };
         let focused = i == app.contact_form.active_field;
         render_field(f, app, *field, rect, focused);
