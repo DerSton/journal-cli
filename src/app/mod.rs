@@ -135,7 +135,7 @@ impl App {
     pub fn sort_entries(&mut self) {
         self.journal
             .entries
-            .sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            .sort_by_key(|e| std::cmp::Reverse(e.timestamp));
     }
 
     /// Alphabetical by last name, then given names.

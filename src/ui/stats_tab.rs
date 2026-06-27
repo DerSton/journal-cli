@@ -280,7 +280,7 @@ fn calculate_top_contacts(app: &App) -> Vec<(&crate::model::Contact, usize)> {
             counts.push((contact, count));
         }
     }
-    counts.sort_by(|a, b| b.1.cmp(&a.1));
+    counts.sort_by_key(|c| std::cmp::Reverse(c.1));
     counts.into_iter().take(5).collect()
 }
 
