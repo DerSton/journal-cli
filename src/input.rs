@@ -32,10 +32,6 @@ fn handle_list(app: &mut App, key: KeyEvent) {
 
     match key.code {
         KeyCode::Char('q') => app.should_quit = true,
-        KeyCode::Char('/') if matches!(app.active_tab, Tab::Journal | Tab::Contacts) => {
-            app.mode = AppMode::Search;
-            app.selected_index = 0;
-        }
         KeyCode::Tab => {
             let next = match app.active_tab {
                 Tab::Journal => Tab::Contacts,
@@ -66,64 +62,107 @@ fn handle_list(app: &mut App, key: KeyEvent) {
                 app.error_msg = None;
             }
         }
-        KeyCode::PageUp if app.active_tab == Tab::Journal => {
+        _ => match app.active_tab {
+            Tab::Journal => handle_journal_list(app, key),
+            Tab::Contacts => handle_contacts_list(app, key),
+            Tab::Settings => handle_settings_list(app, key),
+            Tab::Stats => handle_stats_list(app, key),
+        },
+    }
+}
+
+fn handle_journal_list(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('/') => {
+            app.mode = AppMode::Search;
+            app.selected_index = 0;
+        }
+        KeyCode::PageUp => {
             app.detail_scroll = app.detail_scroll.saturating_sub(1);
         }
-        KeyCode::PageDown if app.active_tab == Tab::Journal => {
+        KeyCode::PageDown => {
             app.detail_scroll = app.detail_scroll.saturating_add(1);
         }
         KeyCode::Char('n') => {
             app.status_msg = None;
             app.error_msg = None;
-            match app.active_tab {
-                Tab::Journal => {
-                    app.textarea = ratatui_textarea::TextArea::default();
-                    app.mode = AppMode::Writing { is_edit: false };
-                }
-                Tab::Contacts => app.init_contact_form(false),
-                Tab::Settings | Tab::Stats => {}
-            }
+            app.textarea = ratatui_textarea::TextArea::default();
+            app.mode = AppMode::Writing { is_edit: false };
         }
-        KeyCode::Char('e') | KeyCode::Enter => {
+        KeyCode::Char('e') => {
             app.status_msg = None;
             app.error_msg = None;
-            match app.active_tab {
-                Tab::Journal => {
-                    if key.code == KeyCode::Char('e') && !app.journal.entries.is_empty() {
-                        let content = app.journal.entries[app.selected_index].content.clone();
-                        app.textarea = ratatui_textarea::TextArea::new(
-                            content.lines().map(String::from).collect(),
-                        );
-                        app.mode = AppMode::Writing { is_edit: true };
-                    }
-                }
-                Tab::Contacts => {
-                    if key.code == KeyCode::Char('e') && !app.journal.contacts.is_empty() {
-                        app.init_contact_form(true);
-                    }
-                }
-                Tab::Settings => {
-                    app.settings_panel_focused = true;
-                    app.settings_active_field = 0;
-                }
-                Tab::Stats => {}
+            if let Some(real_idx) = app.selected_entry_idx() {
+                let content = app.journal.entries[real_idx].content.clone();
+                app.textarea =
+                    ratatui_textarea::TextArea::new(content.lines().map(String::from).collect());
+                app.mode = AppMode::Writing { is_edit: true };
             }
         }
-        KeyCode::Char('d') | KeyCode::Delete | KeyCode::Esc => {
-            let is_empty = match app.active_tab {
-                Tab::Journal => app.journal.entries.is_empty(),
-                Tab::Contacts => app.journal.contacts.is_empty(),
-                Tab::Settings | Tab::Stats => true,
-            };
-            if key.code == KeyCode::Esc {
-                app.should_quit = true;
-            } else if !is_empty {
+        KeyCode::Char('d') | KeyCode::Delete => {
+            if !app.journal.entries.is_empty() {
                 app.mode = AppMode::DeleteConfirm;
                 app.status_msg = None;
                 app.error_msg = None;
             }
         }
+        KeyCode::Esc => {
+            app.should_quit = true;
+        }
         _ => {}
+    }
+}
+
+fn handle_contacts_list(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('/') => {
+            app.mode = AppMode::Search;
+            app.selected_index = 0;
+        }
+        KeyCode::Char('n') => {
+            app.status_msg = None;
+            app.error_msg = None;
+            app.init_contact_form(false);
+        }
+        KeyCode::Char('e') => {
+            app.status_msg = None;
+            app.error_msg = None;
+            if !app.journal.contacts.is_empty() {
+                app.init_contact_form(true);
+            }
+        }
+        KeyCode::Char('d') | KeyCode::Delete => {
+            if !app.journal.contacts.is_empty() {
+                app.mode = AppMode::DeleteConfirm;
+                app.status_msg = None;
+                app.error_msg = None;
+            }
+        }
+        KeyCode::Esc => {
+            app.should_quit = true;
+        }
+        _ => {}
+    }
+}
+
+fn handle_settings_list(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('e') | KeyCode::Enter => {
+            app.status_msg = None;
+            app.error_msg = None;
+            app.settings_panel_focused = true;
+            app.settings_active_field = 0;
+        }
+        KeyCode::Esc => {
+            app.should_quit = true;
+        }
+        _ => {}
+    }
+}
+
+fn handle_stats_list(app: &mut App, key: KeyEvent) {
+    if key.code == KeyCode::Esc {
+        app.should_quit = true;
     }
 }
 

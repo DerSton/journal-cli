@@ -35,8 +35,6 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let total_words: usize = entries
         .iter()
         .map(|e| e.content.split_whitespace().count())
-        .collect::<Vec<usize>>()
-        .iter()
         .sum();
     let avg_words = if !entries.is_empty() {
         total_words / entries.len()
@@ -153,18 +151,21 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         .wrap(Wrap { trim: true });
     f.render_widget(contact_paragraph, top_chunks[1]);
 
-    // Untere Reihe links: Wortanzahl-Diagramm der letzten 7 Einträge
-    let last_entries: Vec<_> = app.filtered_entries().iter().take(7).cloned().collect();
-    let mut word_data = Vec::new();
-    for entry in last_entries.iter().rev() {
-        let date_str = entry
-            .timestamp
-            .with_timezone(&chrono::Local)
-            .format("%d.%m.")
-            .to_string();
-        let words = entry.content.split_whitespace().count() as u64;
-        word_data.push((date_str, words));
-    }
+    let word_data: Vec<_> = app
+        .filtered_entries()
+        .iter()
+        .take(7)
+        .rev()
+        .map(|entry| {
+            let date_str = entry
+                .timestamp
+                .with_timezone(&chrono::Local)
+                .format("%d.%m.")
+                .to_string();
+            let words = entry.content.split_whitespace().count() as u64;
+            (date_str, words)
+        })
+        .collect();
 
     let bar_data: Vec<(&str, u64)> = word_data.iter().map(|(s, w)| (s.as_str(), *w)).collect();
 
@@ -286,23 +287,12 @@ fn calculate_top_contacts(app: &App) -> Vec<(&crate::model::Contact, usize)> {
 fn calculate_common_words(entries: &[crate::model::JournalEntry]) -> Vec<(String, usize)> {
     let mut counts = HashMap::new();
     for entry in entries {
-        let cleaned: String = entry
-            .content
-            .chars()
-            .map(|c| {
-                if c.is_alphabetic() {
-                    c.to_lowercase().to_string()
-                } else if c.is_whitespace() {
-                    " ".to_string()
-                } else {
-                    "".to_string()
+        for word in entry.content.split(|c: char| !c.is_alphabetic()) {
+            if word.len() > 2 {
+                let lowercase_word = word.to_lowercase();
+                if !STOP_WORDS.contains(&lowercase_word.as_str()) {
+                    *counts.entry(lowercase_word).or_insert(0) += 1;
                 }
-            })
-            .collect();
-
-        for word in cleaned.split_whitespace() {
-            if word.len() > 2 && !STOP_WORDS.contains(&word) {
-                *counts.entry(word.to_string()).or_insert(0) += 1;
             }
         }
     }

@@ -1,10 +1,10 @@
 mod contact_form;
+mod date_utils;
 mod entries;
 mod settings_actions;
 
-pub use contact_form::{
-    ContactField, ContactForm, format_localized_date, get_date_format_info, parse_localized_date,
-};
+pub use contact_form::{ContactField, ContactForm};
+pub use date_utils::{format_localized_date, get_date_format_info, parse_localized_date};
 
 use crate::crypto::SALT_SIZE;
 use crate::model::Journal;
@@ -233,5 +233,91 @@ impl App {
     pub fn save_journal(&mut self) -> Result<(), String> {
         self.journal
             .save(&self.file_path, &self.password, &self.salt)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Contact, JournalEntry};
+    use chrono::Utc;
+
+    fn test_app() -> App {
+        App::new(
+            Journal::default(),
+            "dummy.jrnl".to_string(),
+            "password".to_string(),
+            [0u8; crate::crypto::SALT_SIZE],
+        )
+    }
+
+    #[test]
+    fn test_filtering_and_indexing() {
+        let mut app = test_app();
+        app.journal.entries = vec![
+            JournalEntry {
+                id: "1".to_string(),
+                timestamp: Utc::now(),
+                content: "First entry with rust".to_string(),
+            },
+            JournalEntry {
+                id: "2".to_string(),
+                timestamp: Utc::now(),
+                content: "Second entry with python".to_string(),
+            },
+            JournalEntry {
+                id: "3".to_string(),
+                timestamp: Utc::now(),
+                content: "Third entry with rust programming".to_string(),
+            },
+        ];
+
+        // Without query, all entries should be shown in original order
+        app.search_query = String::new();
+        assert_eq!(app.filtered_entries().len(), 3);
+
+        // With query "rust", 2 entries should be shown
+        app.search_query = "rust".to_string();
+        let filtered = app.filtered_entries();
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0].id, "1");
+        assert_eq!(filtered[1].id, "3");
+
+        // Test selected_entry_idx resolves correct master index
+        // If we select the second filtered item (index 1, which has ID "3")
+        app.selected_index = 1;
+        assert_eq!(app.selected_entry_idx(), Some(2)); // maps to master index 2 (ID "3")
+
+        // If we select the first filtered item (index 0, which has ID "1")
+        app.selected_index = 0;
+        assert_eq!(app.selected_entry_idx(), Some(0)); // maps to master index 0 (ID "1")
+    }
+
+    #[test]
+    fn test_contact_filtering_and_indexing() {
+        let mut app = test_app();
+        app.journal.contacts = vec![
+            Contact {
+                id: "1".to_string(),
+                first_names: vec!["Alice".to_string()],
+                last_name: "Smith".to_string(),
+                nickname: "Ali".to_string(),
+                ..Default::default()
+            },
+            Contact {
+                id: "2".to_string(),
+                first_names: vec!["Bob".to_string()],
+                last_name: "Jones".to_string(),
+                ..Default::default()
+            },
+        ];
+
+        app.search_query = "ali".to_string();
+        let filtered = app.filtered_contacts();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, "1");
+
+        app.selected_index = 0;
+        assert_eq!(app.selected_contact_idx(), Some(0));
     }
 }
