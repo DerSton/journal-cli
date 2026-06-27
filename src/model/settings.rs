@@ -18,6 +18,10 @@ fn default_ollama_model() -> String {
     "llama3".to_string()
 }
 
+fn default_ollama_days() -> u32 {
+    7
+}
+
 /// Persistent user configuration settings.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Settings {
@@ -33,6 +37,9 @@ pub struct Settings {
     /// The Ollama model name used for summary.
     #[serde(default = "default_ollama_model")]
     pub ollama_model: String,
+    /// Number of days of journal entries to use for the AI summary.
+    #[serde(default = "default_ollama_days")]
+    pub ollama_days: u32,
 }
 
 impl Default for Settings {
@@ -42,6 +49,7 @@ impl Default for Settings {
             lock_on_suspend: default_lock_on_suspend(),
             ollama_enabled: default_ollama_enabled(),
             ollama_model: default_ollama_model(),
+            ollama_days: default_ollama_days(),
         }
     }
 }

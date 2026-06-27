@@ -187,6 +187,7 @@ mod tests {
         assert!(journal.entries.is_empty());
         assert_eq!(journal.settings.autolock_timeout_mins, 5);
         assert!(journal.settings.lock_on_suspend);
+        assert_eq!(journal.settings.ollama_days, 7);
     }
 
     #[test]

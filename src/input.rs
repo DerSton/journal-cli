@@ -274,8 +274,15 @@ fn handle_settings_panel(app: &mut App, key: KeyEvent) {
             _ => {}
         },
         4 => match key.code {
-            KeyCode::Up | KeyCode::Down | KeyCode::Tab | KeyCode::BackTab => {
-                app.settings_active_field = if app.settings_active_field == 0 { 1 } else { 0 };
+            KeyCode::Down | KeyCode::Tab => {
+                app.settings_active_field = (app.settings_active_field + 1) % 3;
+            }
+            KeyCode::Up | KeyCode::BackTab => {
+                app.settings_active_field = if app.settings_active_field == 0 {
+                    2
+                } else {
+                    app.settings_active_field - 1
+                };
             }
             KeyCode::Left
             | KeyCode::Right
@@ -284,13 +291,20 @@ fn handle_settings_panel(app: &mut App, key: KeyEvent) {
             | KeyCode::Char(' ') => {
                 if app.settings_active_field == 0 {
                     app.toggle_ollama_enabled();
-                } else if key.code != KeyCode::Char(' ') {
+                } else if app.settings_active_field == 1 && key.code != KeyCode::Char(' ') {
                     let delta = if key.code == KeyCode::Left || key.code == KeyCode::Char('h') {
                         -1
                     } else {
                         1
                     };
                     app.adjust_ollama_model(delta);
+                } else if app.settings_active_field == 2 && key.code != KeyCode::Char(' ') {
+                    let delta = if key.code == KeyCode::Left || key.code == KeyCode::Char('h') {
+                        -1
+                    } else {
+                        1
+                    };
+                    app.adjust_ollama_days(delta);
                 }
             }
             _ => {}

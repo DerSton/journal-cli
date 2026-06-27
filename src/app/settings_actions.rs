@@ -109,4 +109,18 @@ impl App {
         self.ollama_summary = None;
         self.persist_settings();
     }
+
+    /// Adjusts the weekly summary day range and persists the setting.
+    pub fn adjust_ollama_days(&mut self, delta: i32) {
+        let current = self.journal.settings.ollama_days as i32;
+        let next = (current + delta).clamp(1, 365) as u32; // Clamp between 1 and 365 days
+        self.journal.settings.ollama_days = next;
+
+        // Clear cached summary to force reload with the new range
+        self.ollama_summary = None;
+        if self.journal.settings.ollama_enabled {
+            self.trigger_ollama_summary();
+        }
+        self.persist_settings();
+    }
 }

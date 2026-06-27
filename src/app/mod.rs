@@ -333,19 +333,22 @@ impl App {
             return;
         }
 
-        // Gather relevant entries (strictly last 7 days only)
+        // Gather relevant entries (strictly last N days only)
         let now = chrono::Utc::now();
-        let seven_days_ago = now - chrono::Duration::days(7);
+        let days = self.journal.settings.ollama_days as i64;
+        let days_ago = now - chrono::Duration::days(days);
         let entries_to_summarize: Vec<&crate::model::JournalEntry> = self
             .journal
             .entries
             .iter()
-            .filter(|e| e.timestamp >= seven_days_ago)
+            .filter(|e| e.timestamp >= days_ago)
             .collect();
 
         if entries_to_summarize.is_empty() {
-            self.ollama_summary =
-                Some("No entries written in the last 7 days to summarize.".to_string());
+            self.ollama_summary = Some(format!(
+                "No entries written in the last {} days to summarize.",
+                days
+            ));
             self.ollama_error = None;
             return;
         }
@@ -363,7 +366,10 @@ impl App {
         prompt.push_str("You are a personal journal summarizer.\n");
         prompt.push_str(&format!("Current date and time: {}\n\n", current_time_utc));
 
-        prompt.push_str("Below are the journal entries written by the user over the last 7 days, ordered chronologically from newest to oldest (newest first):\n\n");
+        prompt.push_str(&format!(
+            "Below are the journal entries written by the user over the last {} days, ordered chronologically from newest to oldest (newest first):\n\n",
+            days
+        ));
         for entry in &entries_to_summarize {
             let date_str = entry
                 .timestamp
@@ -400,7 +406,7 @@ impl App {
 
         prompt.push_str("\nWrite a brief, continuous summary (Fließtext, do NOT use bullet points, do NOT use lists) in the same language as the entries (e.g. German if entries are in German).\n");
         prompt.push_str("Write the summary in the third-person perspective (e.g. 'Der Nutzer hat...', 'Gestern hat er...'), NEVER use the first-person ('Ich-Perspektive').\n");
-        prompt.push_str("The summary should go chronologically from newest to oldest, discussing the most recent events first.\n");
+        prompt.push_str("Do NOT write a day-by-day chronological list or sequence. Instead, write a single continuous paragraph (ein einzelner zusammenhängender Absatz) that summarizes the entire time period as a whole.\n");
         prompt.push_str("Summary:\n");
 
         let (tx, rx) = std::sync::mpsc::channel();
