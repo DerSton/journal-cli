@@ -10,6 +10,14 @@ fn default_lock_on_suspend() -> bool {
     true
 }
 
+fn default_ollama_enabled() -> bool {
+    false
+}
+
+fn default_ollama_model() -> String {
+    "llama3".to_string()
+}
+
 /// Persistent user configuration settings.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Settings {
@@ -19,6 +27,12 @@ pub struct Settings {
     /// Automatically lock the journal when the system workstation suspends (Windows only).
     #[serde(default = "default_lock_on_suspend")]
     pub lock_on_suspend: bool,
+    /// Whether Ollama-based summary is enabled on the Dashboard.
+    #[serde(default = "default_ollama_enabled")]
+    pub ollama_enabled: bool,
+    /// The Ollama model name used for summary.
+    #[serde(default = "default_ollama_model")]
+    pub ollama_model: String,
 }
 
 impl Default for Settings {
@@ -26,6 +40,8 @@ impl Default for Settings {
         Self {
             autolock_timeout_mins: default_autolock_timeout(),
             lock_on_suspend: default_lock_on_suspend(),
+            ollama_enabled: default_ollama_enabled(),
+            ollama_model: default_ollama_model(),
         }
     }
 }

@@ -1,5 +1,6 @@
 mod auth;
 mod contacts_tab;
+mod dashboard_tab;
 mod journal_tab;
 mod modals;
 mod settings_tab;
@@ -37,6 +38,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let main_area = chunks[1];
     if app.active_tab == Tab::Stats {
         stats_tab::draw(f, app, main_area);
+    } else if app.active_tab == Tab::Dashboard {
+        dashboard_tab::draw(f, app, main_area);
     } else {
         let main_chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -63,7 +66,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Tab::Journal => journal_tab::draw(f, app, list_area, content_area),
             Tab::Contacts => contacts_tab::draw(f, app, list_area, content_area),
             Tab::Settings => settings_tab::draw(f, app, list_area, content_area),
-            Tab::Stats => {}
+            Tab::Stats | Tab::Dashboard => {}
         }
     }
 
@@ -85,14 +88,16 @@ fn draw_tab_bar(f: &mut Frame, app: &App, area: Rect) {
 
     let line = Line::from(vec![
         Span::raw(" Journal CLI  "),
-        tab_span("Journal [1]", Tab::Journal),
+        tab_span("Dashboard [1]", Tab::Dashboard),
         Span::styled(" | ", theme::muted_style()),
-        tab_span("Contacts [2]", Tab::Contacts),
+        tab_span("Journal [2]", Tab::Journal),
         Span::styled(" | ", theme::muted_style()),
-        tab_span("Stats [3]", Tab::Stats),
+        tab_span("Contacts [3]", Tab::Contacts),
         Span::styled(" | ", theme::muted_style()),
-        tab_span("Settings [4]", Tab::Settings),
-        Span::styled("   (Tab or 1-4 to switch)", theme::muted_style()),
+        tab_span("Stats [4]", Tab::Stats),
+        Span::styled(" | ", theme::muted_style()),
+        tab_span("Settings [5]", Tab::Settings),
+        Span::styled("   (Tab or 1-5 to switch)", theme::muted_style()),
     ]);
 
     f.render_widget(Paragraph::new(line).block(theme::panel_block("")), area);
@@ -132,6 +137,11 @@ fn help_hints(app: &App) -> Vec<Span<'static>> {
                 spans.extend(hint("Ctrl+S", "Save"));
             } else {
                 match app.active_tab {
+                    Tab::Dashboard => {
+                        if app.journal.settings.ollama_enabled {
+                            spans.extend(hint("r", "Regenerate summary"));
+                        }
+                    }
                     Tab::Journal => {
                         spans.extend(hint("/", "Search"));
                         spans.extend(hint("n", "New entry"));
@@ -166,7 +176,7 @@ fn help_hints(app: &App) -> Vec<Span<'static>> {
                 spans.extend(hint("Ctrl+S", "Save"));
                 spans.extend(hint("Esc", "Cancel"));
             }
-            Tab::Settings | Tab::Stats => {}
+            Tab::Settings | Tab::Stats | Tab::Dashboard => {}
         },
         AppMode::ContactPicker { .. } => {
             spans.extend(hint("Up/Down", "Select contact"));

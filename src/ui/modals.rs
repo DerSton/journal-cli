@@ -29,6 +29,7 @@ fn draw_delete_confirm(f: &mut Frame, app: &App) {
     f.render_widget(Clear, area);
 
     let item = match app.active_tab {
+        Tab::Dashboard => "dashboard item",
         Tab::Journal => "journal entry",
         Tab::Contacts => "contact",
         Tab::Settings => "setting",

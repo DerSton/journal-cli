@@ -218,7 +218,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(cloud_paragraph, bottom_chunks[1]);
 }
 
-fn calculate_streaks(entries: &[crate::model::JournalEntry]) -> (u32, u32) {
+pub(crate) fn calculate_streaks(entries: &[crate::model::JournalEntry]) -> (u32, u32) {
     if entries.is_empty() {
         return (0, 0);
     }

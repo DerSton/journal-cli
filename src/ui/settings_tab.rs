@@ -24,6 +24,7 @@ pub fn draw(f: &mut Frame, app: &mut App, list_area: Rect, content_area: Rect) {
         1 => draw_timeout_panel(f, app, inner),
         2 => draw_lock_panel(f, app, inner),
         3 => draw_recovery_panel(f, app, inner),
+        4 => draw_ollama_panel(f, app, inner),
         _ => {}
     }
 }
@@ -202,6 +203,76 @@ fn draw_recovery_panel(f: &mut Frame, app: &App, area: Rect) {
             ]));
         }
     }
+
+    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+}
+
+fn draw_ollama_panel(f: &mut Frame, app: &App, area: Rect) {
+    let mut lines = vec![
+        Line::from(""),
+        Line::from("Ollama integration generates a summary of your recent journal entries.")
+            .alignment(Alignment::Center)
+            .style(theme::muted_style()),
+        Line::from(""),
+    ];
+
+    let enabled_focused = app.settings_panel_focused && app.settings_active_field == 0;
+    let model_focused = app.settings_panel_focused && app.settings_active_field == 1;
+
+    let value = if app.journal.settings.ollama_enabled {
+        "Enabled"
+    } else {
+        "Disabled"
+    };
+
+    lines.push(
+        Line::from(vec![
+            Span::styled("Ollama Summary: ", theme::muted_style()),
+            Span::styled(
+                format!(" < {} > ", value),
+                if enabled_focused {
+                    theme::title_style()
+                } else {
+                    theme::text_style()
+                },
+            ),
+        ])
+        .alignment(Alignment::Center),
+    );
+
+    // Model selection list
+    let model_val = &app.journal.settings.ollama_model;
+    lines.push(
+        Line::from(vec![
+            Span::styled("Selected Model: ", theme::muted_style()),
+            Span::styled(
+                format!(" < {} > ", model_val),
+                if model_focused {
+                    theme::title_style()
+                } else {
+                    theme::text_style()
+                },
+            ),
+        ])
+        .alignment(Alignment::Center),
+    );
+
+    lines.push(Line::from(""));
+
+    let instructions = if app.settings_panel_focused {
+        if app.settings_active_field == 0 {
+            "Left/Right or Space: Toggle enablement   Tab/Down: Focus Model   Esc: Back to list"
+        } else {
+            "Left/Right: Select model   Tab/Up: Focus Toggle   Esc: Back to list"
+        }
+    } else {
+        "Enter: Open"
+    };
+    lines.push(
+        Line::from(instructions)
+            .alignment(Alignment::Center)
+            .style(theme::muted_style()),
+    );
 
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
 }
