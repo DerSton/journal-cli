@@ -3,8 +3,20 @@ name: CI
 on:
   push:
     branches: ["main"]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "build.rs"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: ["main"]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "build.rs"
+      - ".github/workflows/ci.yml"
 
 jobs:
   fmt:
