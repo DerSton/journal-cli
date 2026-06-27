@@ -17,7 +17,7 @@ pub struct Journal {
     pub settings: Settings,
 }
 
-fn get_system_locale() -> chrono::format::Locale {
+pub fn get_system_locale() -> chrono::format::Locale {
     if let Some(locale_str) = sys_locale::get_locale() {
         let normalized = locale_str.replace('-', "_");
         if let Ok(locale) = normalized.parse::<chrono::format::Locale>() {

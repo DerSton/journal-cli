@@ -2,7 +2,9 @@ mod contact_form;
 mod entries;
 mod settings_actions;
 
-pub use contact_form::{ContactField, ContactForm};
+pub use contact_form::{
+    ContactField, ContactForm, format_localized_date, get_date_format_info, parse_localized_date,
+};
 
 use crate::crypto::SALT_SIZE;
 use crate::model::Journal;

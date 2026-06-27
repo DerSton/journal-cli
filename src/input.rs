@@ -285,8 +285,8 @@ fn handle_contact_form(app: &mut App, key: KeyEvent, is_edit: bool) {
         } else {
             app.contact_form.date_of_death.lines().join("")
         };
-        let current_date = chrono::NaiveDate::parse_from_str(raw.trim(), "%Y-%m-%d")
-            .unwrap_or_else(|_| chrono::Local::now().date_naive());
+        let current_date = crate::app::parse_localized_date(raw.trim())
+            .unwrap_or_else(|| chrono::Local::now().date_naive());
         app.mode = AppMode::DatePicker {
             is_edit,
             field_index,
@@ -370,7 +370,7 @@ fn handle_date_picker(
             return;
         }
         KeyCode::Enter => {
-            let formatted = current_date.format("%Y-%m-%d").to_string();
+            let formatted = crate::app::format_localized_date(current_date);
             if field_index == 0 {
                 app.contact_form.birthdate = ratatui_textarea::TextArea::new(vec![formatted]);
             } else {

@@ -115,7 +115,10 @@ fn draw_profile_card(f: &mut Frame, contact: &Contact, area: Rect) {
         } else {
             String::new()
         };
-        field("Born:", &format!("{}{}", Contact::format_date(birth), age));
+        field(
+            "Born:",
+            &format!("{}{}", crate::app::format_localized_date(birth), age),
+        );
     }
     if let Some(death) = contact.date_of_death {
         let age = contact
@@ -124,7 +127,7 @@ fn draw_profile_card(f: &mut Frame, contact: &Contact, area: Rect) {
             .unwrap_or_default();
         field(
             "Deceased:",
-            &format!("{}{}", Contact::format_date(death), age),
+            &format!("{}{}", crate::app::format_localized_date(death), age),
         );
     }
 
@@ -220,8 +223,14 @@ fn field_label(field: ContactField) -> String {
         ContactField::PreferredName => "Preferred Name".to_string(),
         ContactField::MaidenName => "Maiden Name".to_string(),
         ContactField::Suffix => "Suffix".to_string(),
-        ContactField::Birthdate => "Birthdate (YYYY-MM-DD)".to_string(),
-        ContactField::DateOfDeath => "Date of Death (YYYY-MM-DD, optional)".to_string(),
+        ContactField::Birthdate => {
+            let (placeholder, _) = crate::app::get_date_format_info();
+            format!("Birthdate ({})", placeholder)
+        }
+        ContactField::DateOfDeath => {
+            let (placeholder, _) = crate::app::get_date_format_info();
+            format!("Date of Death ({}, optional)", placeholder)
+        }
         ContactField::Gender => "Gender".to_string(),
         ContactField::Pronouns => "Pronouns".to_string(),
         ContactField::Nationality(i) => format!("Nationality {}", i + 1),

@@ -39,11 +39,6 @@ pub struct Contact {
 }
 
 impl Contact {
-    /// Formats a date as YYYY-MM-DD.
-    pub fn format_date(date: chrono::NaiveDate) -> String {
-        date.format("%Y-%m-%d").to_string()
-    }
-
     /// The `{{person|<id>}}` tag used to mention this contact inside journal entries.
     pub fn mention_tag(&self) -> String {
         format!("{{{{person|{}}}}}", self.id)
@@ -175,5 +170,17 @@ mod tests {
         let deserialized: Contact = serde_json::from_str(&serialized).unwrap();
         assert_eq!(deserialized.birthdate, contact.birthdate);
         assert_eq!(deserialized.date_of_death, contact.date_of_death);
+    }
+
+    #[test]
+    fn test_localized_date_parsing_and_formatting() {
+        let date = NaiveDate::from_ymd_opt(1990, 5, 15).unwrap();
+
+        let parsed_iso = crate::app::parse_localized_date("1990-05-15");
+        assert_eq!(parsed_iso, Some(date));
+
+        let formatted = crate::app::format_localized_date(date);
+        let parsed_formatted = crate::app::parse_localized_date(&formatted);
+        assert_eq!(parsed_formatted, Some(date));
     }
 }
