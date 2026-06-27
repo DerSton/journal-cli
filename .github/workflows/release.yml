@@ -41,6 +41,8 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build release binary
+        env:
+          JOURNAL_CLI_VERSION: ${{ github.ref_name }}
         run: cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Stage artifact

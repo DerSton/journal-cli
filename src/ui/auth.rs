@@ -32,6 +32,8 @@ pub fn draw_login(f: &mut Frame, app: &App) {
             Span::styled("Ctrl+R", theme::title_style()),
             Span::raw(" - Recovery mode"),
         ]),
+        Line::from(""),
+        Line::from(format!("v{}", env!("APP_VERSION"))).style(theme::muted_style()),
     ];
     if let Some(ref err) = app.error_msg {
         lines.insert(0, Line::from(""));
