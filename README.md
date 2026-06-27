@@ -10,10 +10,15 @@ jnl my-journal.jrnl
 
 - **Encrypted at rest** — ChaCha20Poly1305 with an Argon2id-derived key (OWASP-recommended params). Your entries never touch disk in plaintext.
 - **Terminal UI** — fast, keyboard-driven, built with [ratatui](https://github.com/ratatui-org/ratatui).
-- **Journal tab** — write and browse entries, newest first.
+- **Dashboard tab** — landing dashboard displaying summary statistics (Total entries, total words, last entry date, current/record streaks) and a weekly AI-generated chronological summary of your recent days (powered by local Ollama).
+- **Journal tab** — write and browse entries, newest first. Run local **KI-Analyse** (AI analysis) on any selected entry by pressing `a`.
 - **Contacts tab** — rich contact records (names, pronouns, languages, birthdate, notes, ...) sorted alphabetically. Birthdate and Date of Death inputs are fully localized and automatically adapt to your system's date format (e.g. `DD.MM.YYYY`). Mention a contact in an entry with `{{person|<uuid>}}` and it renders as a highlighted name.
 - **Stats tab** — view entry streaks, total and average word counts, top contact mentions, and a word-count history chart for recent entries.
-- **Settings tab** — change your master password, set an inactivity auto-lock timeout, lock on workstation suspend (Windows), generate recovery shares.
+- **Settings tab** — change your master password, set an inactivity auto-lock timeout, lock on workstation suspend (Windows), generate recovery shares, toggle Ollama weekly summaries, and cycle through available local Ollama models.
+- **Local AI Analysis (KI-Analyse)** — fully offline analysis of journal entries. Press `a` in the Journal list to perform:
+  - *Spelling & Formatting corrections* with a visual diff confirmation pane.
+  - *Automatic contact linking* (linking names in text to database contacts with manual confirmation).
+  - *Strict tag suggestions* stored separately in the database JSON.
 - **Password recovery** — master password can be split into Shamir secret-sharing shares, so you can recover access without ever storing the password itself.
 - **Transactional saves** — password changes and journal writes go through a temp-file + rename, so a crash mid-write can't corrupt your journal.
 
@@ -66,7 +71,11 @@ Run `jnl --help` for the full option list, `jnl --version` for the version.
 
 ### Key bindings
 
-The app is keyboard-driven; on-screen hints show available actions per mode (writing, browsing, contact editing, settings). Tab/Shift+Tab switches between Journal, Contacts, Stats, and Settings tabs.
+The app is keyboard-driven; on-screen hints show available actions per mode.
+- **Tab switching**: Press `Tab` or numbers `1`–`5` to switch directly between tabs (1: Dashboard, 2: Journal, 3: Contacts, 4: Stats, 5: Settings).
+- **Dashboard**: Press `r` to regenerate the weekly Ollama summary. Use `Up`/`Down`/`PageUp`/`PageDown`/`j`/`k` to scroll the summary text.
+- **Journal**: Press `n` for new entry, `e` to edit, `d`/`Delete` to delete, and `a` to run local KI-Analyse (AI analysis).
+- **KI-Analyse Review**: Use `Tab` to switch focus between Tags, Contacts, and Diff panels. Press `Space` to toggle selections, `Ctrl+S` to apply, and `Esc` to cancel.
 
 ## File format
 
@@ -80,4 +89,4 @@ A journal file starts with the magic bytes `JRNL`, followed by a 16-byte salt, a
 
 ## License
 
-No license specified yet.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
