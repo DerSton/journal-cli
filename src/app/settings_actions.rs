@@ -1,10 +1,12 @@
+//! App state controller implementations for settings panel actions.
+
 use super::App;
 use crate::crypto::{self, SALT_SIZE};
 use rand::random;
 use ratatui_textarea::TextArea;
 
 impl App {
-    /// Adjusts the inactivity autolock timeout (in minutes) and saves immediately. 0 disables it.
+    /// Adjusts the inactivity autolock timeout (in minutes) and saves immediately. A value of 0 disables it.
     pub fn adjust_autolock_timeout(&mut self, delta: i32) {
         let current = self.journal.settings.autolock_timeout_mins as i32;
         self.journal.settings.autolock_timeout_mins = (current + delta).max(0) as u32;
@@ -17,6 +19,7 @@ impl App {
         self.persist_settings();
     }
 
+    /// Helper to persist current settings changes to the encrypted journal file.
     fn persist_settings(&mut self) {
         if let Err(e) = self.save_journal() {
             self.error_msg = Some(format!("Save failed: {}", e));
@@ -25,8 +28,16 @@ impl App {
         }
     }
 
-    /// Transactionally re-encrypts the journal under a new master password (write to a
-    /// temp file, then rename) and updates the in-memory credentials on success.
+    /// Transactionally re-encrypts the journal under a new master password and updates in-memory credentials.
+    ///
+    /// Writes to a temporary `.tmp` file first, then renames it on success to prevent data loss on write failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The new password is empty.
+    /// - The confirmation password does not match.
+    /// - File creation, encryption, or rename operations fail.
     pub fn change_password(&mut self) -> Result<(), String> {
         let new_pw = self.settings_password_new.lines().join("");
         let confirm_pw = self.settings_password_confirm.lines().join("");
@@ -59,7 +70,11 @@ impl App {
         Ok(())
     }
 
-    /// Splits the master password into recovery shares using Shamir secret sharing.
+    /// Splits the master password into recovery shares using Shamir's Secret Sharing (SSS).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if SSS key generation thresholds are invalid.
     pub fn generate_recovery_shares(&mut self) -> Result<(), String> {
         let shares = crypto::split_password(
             &self.password,

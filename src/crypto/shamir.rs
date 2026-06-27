@@ -1,3 +1,8 @@
+//! Shamir's Secret Sharing (SSS) over the Galois Field GF(256).
+//!
+//! Provides utilities to split passwords into multiple shares and reconstruct them
+//! if a threshold number of shares is provided.
+
 use std::sync::OnceLock;
 
 static TABLES: OnceLock<([u8; 256], [u8; 256])> = OnceLock::new();
@@ -90,12 +95,37 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+/// A parsed recovery share.
 pub struct ParsedShare {
+    /// The unique 1-based index of this share.
     pub index: u8,
+    /// The number of shares required to reconstruct the secret.
     pub threshold: usize,
+    /// The raw byte payload of the share.
     pub payload: Vec<u8>,
 }
 
+/// Parses a Shamir share string back into a [`ParsedShare`] struct.
+///
+/// # Examples
+///
+/// ```
+/// use journal_cli::crypto::shamir::parse_share;
+///
+/// let share_str = "JRNL-REC-1-3-02112233445566778899aabbccddeeff02112233445566778899aabbccddeeff";
+/// let share = parse_share(share_str).unwrap();
+/// assert_eq!(share.index, 1);
+/// assert_eq!(share.threshold, 3);
+/// assert_eq!(share.payload.len(), 32);
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The share format is invalid (does not start with `JRNL-REC-` or has wrong part count).
+/// - The index or threshold are not valid integers.
+/// - The payload hex encoding is invalid.
+/// - The index or threshold is 0.
 pub fn parse_share(share_str: &str) -> Result<ParsedShare, String> {
     let trimmed = share_str.trim().to_uppercase();
     let parts: Vec<&str> = trimmed.split('-').collect();
@@ -127,6 +157,26 @@ pub fn parse_share(share_str: &str) -> Result<ParsedShare, String> {
     })
 }
 
+/// Splits a password into `num_shares` total recovery shares, where any `threshold`
+/// of them are required to reconstruct it.
+///
+/// # Examples
+///
+/// ```
+/// use journal_cli::crypto::shamir::split_password;
+///
+/// let password = "my_recovery_password";
+/// let shares = split_password(password, 3, 5).unwrap();
+/// assert_eq!(shares.len(), 5);
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - `threshold` or `num_shares` is 0.
+/// - `threshold` is greater than `num_shares`.
+/// - `num_shares` exceeds 255.
+/// - The password is empty or exceeds 65535 characters.
 pub fn split_password(
     password: &str,
     threshold: usize,
@@ -195,6 +245,31 @@ pub fn split_password(
     Ok(shares)
 }
 
+/// Reconstructs the password from a slice of share strings.
+///
+/// # Examples
+///
+/// ```
+/// use journal_cli::crypto::shamir::{split_password, reconstruct_password};
+///
+/// let password = "my_recovery_password";
+/// let shares = split_password(password, 2, 3).unwrap();
+///
+/// // We need at least 2 shares to reconstruct:
+/// let subset = vec![shares[0].clone(), shares[2].clone()];
+/// let reconstructed = reconstruct_password(&subset).unwrap();
+/// assert_eq!(reconstructed, password);
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The list of shares is empty.
+/// - Any share fails to parse.
+/// - Shares have mismatched thresholds or payload lengths.
+/// - Duplicate shares are detected.
+/// - The number of provided shares is less than the required threshold.
+/// - Reconstructed data is corrupted or is not valid UTF-8.
 pub fn reconstruct_password(share_strs: &[String]) -> Result<String, String> {
     if share_strs.is_empty() {
         return Err("No shares provided".to_string());

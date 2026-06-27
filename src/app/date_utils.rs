@@ -1,6 +1,22 @@
+//! Utility functions for resolving, formatting, and parsing localized date formats.
+//!
+//! Evaluates the system's locale settings at runtime to detect the preferred date separator
+//! and field order, offering localized date entry and presentation.
+
 use crate::model::get_system_locale;
 use chrono::NaiveDate;
 
+/// Resolves the user's system locale date presentation format.
+///
+/// Formats a test date (`2023-11-22`) in the current system locale, inspects the
+/// resulting string to find the separator (e.g. `.`, `/`, `-`) and field order, and constructs
+/// a user placeholder (e.g. `"DD.MM.YYYY"`) and a prioritized list of `strftime` patterns.
+///
+/// # Returns
+///
+/// A tuple containing:
+/// - A helper placeholder string for input fields (e.g. `"DD.MM.YYYY"`).
+/// - A vector of format strings (`Vec<String>`), where the first format is the detected primary format.
 pub fn get_date_format_info() -> (String, Vec<String>) {
     let locale = get_system_locale();
 
@@ -85,11 +101,28 @@ pub fn get_date_format_info() -> (String, Vec<String>) {
     (placeholder, formats)
 }
 
+/// Formats a date to a string using the primary detected system format.
 pub fn format_localized_date(date: NaiveDate) -> String {
     let (_, formats) = get_date_format_info();
     date.format(&formats[0]).to_string()
 }
 
+/// Parses a localized date string using the detected system date formats and standard fallbacks.
+///
+/// # Examples
+///
+/// ```
+/// use journal_cli::app::parse_localized_date;
+/// use chrono::NaiveDate;
+///
+/// // Parsing ISO date format fallback:
+/// let parsed = parse_localized_date("2023-11-22").unwrap();
+/// assert_eq!(parsed, NaiveDate::from_ymd_opt(2023, 11, 22).unwrap());
+///
+/// // Parsing European date format fallback:
+/// let parsed_eu = parse_localized_date("22.11.2023").unwrap();
+/// assert_eq!(parsed_eu, NaiveDate::from_ymd_opt(2023, 11, 22).unwrap());
+/// ```
 pub fn parse_localized_date(s: &str) -> Option<NaiveDate> {
     let (_, formats) = get_date_format_info();
     for fmt in &formats {

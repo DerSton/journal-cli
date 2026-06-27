@@ -1,3 +1,8 @@
+//! App state management and controllers.
+//!
+//! Provides the primary [`App`] struct which tracks terminal state, navigation tabs,
+//! input modes, and form states.
+
 mod contact_form;
 mod date_utils;
 mod entries;
@@ -10,11 +15,16 @@ use crate::crypto::SALT_SIZE;
 use crate::model::Journal;
 use ratatui_textarea::TextArea;
 
+/// Tabs available in the primary application navigation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
+    /// Journal entry view.
     Journal,
+    /// Contacts directory view.
     Contacts,
+    /// Journal and word statistics view.
     Stats,
+    /// Settings management view.
     Settings,
 }
 
@@ -26,44 +36,63 @@ pub const SETTINGS_GROUPS: &[&str] = &[
     "Recovery Shares",
 ];
 
+/// The application's current input and focus state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
     /// Browsing a list (journal entries, contacts, or settings groups).
     List,
     /// Editing a journal entry or the contact form.
     Writing {
+        /// Whether the editor is editing an existing item (true) or creating a new one (false).
         is_edit: bool,
     },
     /// Picking a contact to insert as a `{{person|id}}` mention.
     ContactPicker {
+        /// Whether the parent context is an edit mode.
         is_edit: bool,
+        /// The currently highlighted index in the contact picker modal.
         selected_contact_index: usize,
     },
-    /// Calendar overlay for a date field. `field_index` 0 = birthdate, 1 = date of death.
+    /// Calendar overlay for a date field.
     DatePicker {
+        /// Whether the parent context is an edit mode.
         is_edit: bool,
+        /// Field index: 0 = birthdate, 1 = date of death.
         field_index: usize,
+        /// Currently highlighted date in the calendar widget.
         current_date: chrono::NaiveDate,
     },
+    /// Confirmation dialog before deleting an entry or contact.
     DeleteConfirm,
+    /// Prompt for entering the master password.
     Login,
+    /// Password recovery screen (entering Shamir shares).
     Recovery,
+    /// Password recovery reset confirmation.
     RecoveryReset,
+    /// Filtering entries or contacts using a search string.
     Search,
 }
 
+/// The global application state container.
 pub struct App {
+    /// The loaded decrypted journal database.
     pub journal: Journal,
+    /// File path to the journal file.
     pub file_path: String,
+    /// Master password used for re-encrypting the database on save.
     pub password: String,
+    /// Key derivation salt resolved on load or creation.
     pub salt: [u8; SALT_SIZE],
 
+    /// Currently active tab in the main list views.
     pub active_tab: Tab,
     /// Highlighted row in the active tab's list (entry, contact, or settings group).
     pub selected_index: usize,
+    /// Current input and focus mode.
     pub mode: AppMode,
 
-    /// Journal entry editor.
+    /// Text area editor for journal entry creation and updates.
     pub textarea: TextArea<'static>,
     /// Scroll offset for the journal entry preview pane.
     pub detail_scroll: u16,
@@ -73,26 +102,40 @@ pub struct App {
 
     /// Whether keys go to the settings right-hand panel (true) or the group list (false).
     pub settings_panel_focused: bool,
-    /// Active field within the focused settings panel (0/1, meaning depends on the group).
+    /// Active field within the focused settings panel.
     pub settings_active_field: usize,
+    /// Text editor for entering a new settings password.
     pub settings_password_new: TextArea<'static>,
+    /// Text editor for confirming the new settings password.
     pub settings_password_confirm: TextArea<'static>,
+    /// Number of recovery shares to generate.
     pub settings_num_shares: usize,
+    /// Number of threshold shares required to recover the password.
     pub settings_threshold: usize,
+    /// Generated Shamir share strings list.
     pub generated_shares: Vec<String>,
 
+    /// Entered Shamir recovery share strings list.
     pub recovery_shares: Vec<String>,
+    /// Status message displayed on the recovery screen.
     pub recovery_status_msg: Option<String>,
+    /// Text editor for entering a Shamir share string.
     pub recovery_textarea: TextArea<'static>,
+    /// Password entered during login.
     pub login_password: String,
 
+    /// Temporary error message shown on the status bar.
     pub error_msg: Option<String>,
+    /// Temporary success or info message shown on the status bar.
     pub status_msg: Option<String>,
+    /// Exit condition flag.
     pub should_quit: bool,
+    /// Current search query string.
     pub search_query: String,
 }
 
 impl App {
+    /// Creates a new [`App`] instance with the specified journal database and session credentials.
     pub fn new(
         journal: Journal,
         file_path: String,
@@ -131,14 +174,14 @@ impl App {
         app
     }
 
-    /// Newest entries first.
+    /// Sorts journal entries by timestamp in descending order (newest first).
     pub fn sort_entries(&mut self) {
         self.journal
             .entries
             .sort_by_key(|e| std::cmp::Reverse(e.timestamp));
     }
 
-    /// Alphabetical by last name, then given names.
+    /// Sorts contacts alphabetically by last name, then by first names.
     pub fn sort_contacts(&mut self) {
         self.journal.contacts.sort_by(|a, b| {
             let last_cmp = a.last_name.to_lowercase().cmp(&b.last_name.to_lowercase());
@@ -153,6 +196,7 @@ impl App {
         });
     }
 
+    /// Switches the active navigation tab, resetting selection index, scroll offset, and mode.
     pub fn switch_tab(&mut self, new_tab: Tab) {
         self.active_tab = new_tab;
         self.selected_index = 0;
@@ -164,6 +208,7 @@ impl App {
         self.mode = AppMode::List;
     }
 
+    /// Returns the length of the list in the currently active tab.
     pub fn list_len(&self) -> usize {
         match self.active_tab {
             Tab::Journal => self.filtered_entries().len(),
@@ -173,6 +218,7 @@ impl App {
         }
     }
 
+    /// Returns a list of references to journal entries, filtered by the current search query.
     pub fn filtered_entries(&self) -> Vec<&crate::model::JournalEntry> {
         if self.search_query.trim().is_empty() {
             self.journal.entries.iter().collect()
@@ -186,6 +232,7 @@ impl App {
         }
     }
 
+    /// Returns a list of references to contacts, filtered by the current search query.
     pub fn filtered_contacts(&self) -> Vec<&crate::model::Contact> {
         if self.search_query.trim().is_empty() {
             self.journal.contacts.iter().collect()
@@ -203,6 +250,7 @@ impl App {
         }
     }
 
+    /// Maps the currently selected filtered entry index back to its index in the master `journal.entries` list.
     pub fn selected_entry_idx(&self) -> Option<usize> {
         let filtered = self.filtered_entries();
         if filtered.is_empty() {
@@ -216,6 +264,7 @@ impl App {
         }
     }
 
+    /// Maps the currently selected filtered contact index back to its index in the master `journal.contacts` list.
     pub fn selected_contact_idx(&self) -> Option<usize> {
         let filtered = self.filtered_contacts();
         if filtered.is_empty() {
@@ -229,7 +278,11 @@ impl App {
         }
     }
 
-    /// Persist the journal under the current password and salt.
+    /// Persists the decrypted in-memory journal database to disk under the current password and salt.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if key derivation, encryption, or writing fails.
     pub fn save_journal(&mut self) -> Result<(), String> {
         self.journal
             .save(&self.file_path, &self.password, &self.salt)

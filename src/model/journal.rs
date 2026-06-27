@@ -1,3 +1,8 @@
+//! Data model representing the master encrypted journal database.
+//!
+//! Handles file serialization, symmetric encryption/decryption on disk,
+//! and localized timestamp formatting.
+
 use crate::crypto::{self, NONCE_SIZE, SALT_SIZE};
 use crate::model::{Contact, JournalEntry, Settings};
 use rand::random;
@@ -8,15 +13,23 @@ use std::path::Path;
 
 const MAGIC_BYTES: &[u8; 4] = b"JRNL";
 
+/// The root journal database containing all entries, contacts, and settings.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Journal {
+    /// List of journal entries.
     pub entries: Vec<JournalEntry>,
+    /// List of contacts/people mentioned in entries.
     #[serde(default)]
     pub contacts: Vec<Contact>,
+    /// User settings.
     #[serde(default)]
     pub settings: Settings,
 }
 
+/// Helper function to retrieve the user's active system locale.
+///
+/// Tries to parse the platform locale name into a [`chrono::format::Locale`],
+/// falling back to [`chrono::format::Locale::POSIX`] on resolution failure.
 pub fn get_system_locale() -> chrono::format::Locale {
     if let Some(locale_str) = sys_locale::get_locale() {
         let normalized = locale_str.replace('-', "_");
@@ -34,6 +47,7 @@ pub fn get_system_locale() -> chrono::format::Locale {
 }
 
 impl Journal {
+    /// Formats a timestamp into a long human-readable localized string.
     pub fn format_timestamp(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
         let local_dt = timestamp.with_timezone(&chrono::Local);
         let locale = get_system_locale();
@@ -42,6 +56,7 @@ impl Journal {
             .to_string()
     }
 
+    /// Formats a timestamp into a short date-time string (e.g. "2026-06-16 12:00:00").
     pub fn format_timestamp_short(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
         let local_dt = timestamp.with_timezone(&chrono::Local);
         let locale = get_system_locale();
@@ -50,15 +65,34 @@ impl Journal {
             .to_string()
     }
 
+    /// Formats a timestamp into a short date string (e.g. "2026-06-16").
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use journal_cli::model::Journal;
+    /// use chrono::TimeZone;
+    ///
+    /// let journal = Journal::default();
+    /// let dt = chrono::Utc.with_ymd_and_hms(2026, 6, 16, 12, 0, 0).unwrap();
+    /// assert_eq!(journal.format_date_short(&dt), "2026-06-16");
+    /// ```
     pub fn format_date_short(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
         let local_dt = timestamp.with_timezone(&chrono::Local);
         let locale = get_system_locale();
         local_dt.format_localized("%Y-%m-%d", locale).to_string()
     }
 
-    /// Load and decrypt a journal file using the provided password.
+    /// Loads and decrypts a journal file using the provided password.
     ///
-    /// Returns the decrypted Journal and the file's salt.
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The file cannot be read or opened.
+    /// - The file size is too short to contain magic bytes, salt, and nonce.
+    /// - The magic bytes do not match `JRNL`.
+    /// - Decryption fails (indicating an incorrect password or corrupted data).
+    /// - JSON deserialization fails.
     pub fn load<P: AsRef<Path>>(
         path: P,
         password: &str,
@@ -92,9 +126,13 @@ impl Journal {
         Ok((journal, salt))
     }
 
-    /// Encrypt and save the journal file using the provided password and salt.
+    /// Encrypts and saves the journal to disk using the provided password and salt.
     ///
     /// Always generates a fresh nonce for encryption.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization, encryption, or writing fails.
     pub fn save<P: AsRef<Path>>(
         &self,
         path: P,
@@ -122,7 +160,11 @@ impl Journal {
         Ok(())
     }
 
-    /// Create, encrypt, and save a new empty journal file with a fresh random salt.
+    /// Creates, encrypts, and saves a new empty journal file with a fresh random salt.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if encryption or file writing fails.
     pub fn create_new<P: AsRef<Path>>(
         path: P,
         password: &str,

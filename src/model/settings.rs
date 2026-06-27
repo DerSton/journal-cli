@@ -1,3 +1,5 @@
+//! Data model representing the user settings.
+
 use serde::{Deserialize, Serialize};
 
 fn default_autolock_timeout() -> u32 {
@@ -8,10 +10,13 @@ fn default_lock_on_suspend() -> bool {
     true
 }
 
+/// Persistent user configuration settings.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Settings {
+    /// Inactivity auto-lock timeout in minutes. Set to 0 to disable.
     #[serde(default = "default_autolock_timeout")]
     pub autolock_timeout_mins: u32,
+    /// Automatically lock the journal when the system workstation suspends (Windows only).
     #[serde(default = "default_lock_on_suspend")]
     pub lock_on_suspend: bool,
 }

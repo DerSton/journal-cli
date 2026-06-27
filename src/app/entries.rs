@@ -1,10 +1,12 @@
+//! App state controller implementations for journal entry actions (saving and deleting).
+
 use super::{App, AppMode};
 use crate::model::JournalEntry;
 use chrono::Utc;
 use uuid::Uuid;
 
 impl App {
-    /// Saves the entry currently in the text area (creating or updating), persisting to disk.
+    /// Saves the entry currently in the text area (creating or updating), persisting it to disk.
     pub fn save_entry(&mut self) {
         let content = self.textarea.lines().join("\n");
         if content.trim().is_empty() {
@@ -44,6 +46,7 @@ impl App {
         }
     }
 
+    /// Deletes the currently selected journal entry, updates selection indices, and persists changes to disk.
     pub fn delete_selected_entry(&mut self) {
         let real_idx = match self.selected_entry_idx() {
             Some(idx) => idx,

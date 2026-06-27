@@ -1,16 +1,41 @@
+//! Cryptographic module for secure key derivation and symmetric authenticated encryption.
+//!
+//! Provides utilities to derive strong keys using Argon2id and perform authenticated
+//! encryption/decryption using ChaCha20Poly1305.
+
 use argon2::{Algorithm, Argon2, Params, Version};
 use chacha20poly1305::{
     ChaCha20Poly1305, Key, Nonce,
     aead::{Aead, KeyInit},
 };
 
-pub const KEY_SIZE: usize = 32; // 256 bits
+/// The size of the derived symmetric key in bytes (256 bits).
+pub const KEY_SIZE: usize = 32;
+/// The required size of the salt in bytes (128 bits).
 pub const SALT_SIZE: usize = 16;
+/// The required size of the initialization vector (nonce) in bytes (96 bits).
 pub const NONCE_SIZE: usize = 12;
 
 /// Derives a 32-byte key from a password and salt using Argon2id.
 ///
 /// Follows OWASP recommendations for parameter choices (19 MiB memory, 2 passes, 1 thread).
+///
+/// # Examples
+///
+/// ```
+/// use journal_cli::crypto::{derive_key, SALT_SIZE};
+///
+/// let password = "my_secure_password";
+/// let salt = [0u8; SALT_SIZE];
+/// let key = derive_key(password, &salt).unwrap();
+/// assert_eq!(key.len(), 32);
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The provided salt does not match [`SALT_SIZE`].
+/// - The Argon2id hashing process fails.
 pub fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; KEY_SIZE], String> {
     if salt.len() != SALT_SIZE {
         return Err(format!("Salt must be exactly {} bytes", SALT_SIZE));
@@ -30,6 +55,22 @@ pub fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; KEY_SIZE], String>
 }
 
 /// Encrypts plaintext bytes using ChaCha20Poly1305 with the derived key and a nonce.
+///
+/// # Examples
+///
+/// ```
+/// use journal_cli::crypto::{encrypt, KEY_SIZE, NONCE_SIZE};
+///
+/// let key = [0u8; KEY_SIZE];
+/// let nonce = [0u8; NONCE_SIZE];
+/// let plaintext = b"Hello, World!";
+/// let ciphertext = encrypt(&key, &nonce, plaintext).unwrap();
+/// assert!(!ciphertext.is_empty());
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if the authenticated encryption operation fails.
 pub fn encrypt(
     key: &[u8; KEY_SIZE],
     nonce: &[u8; NONCE_SIZE],
@@ -45,6 +86,26 @@ pub fn encrypt(
 }
 
 /// Decrypts ciphertext bytes using ChaCha20Poly1305 with the derived key and a nonce.
+///
+/// # Examples
+///
+/// ```
+/// use journal_cli::crypto::{encrypt, decrypt, KEY_SIZE, NONCE_SIZE};
+///
+/// let key = [0u8; KEY_SIZE];
+/// let nonce = [0u8; NONCE_SIZE];
+/// let plaintext = b"Hello, World!";
+/// let ciphertext = encrypt(&key, &nonce, plaintext).unwrap();
+/// let decrypted = decrypt(&key, &nonce, &ciphertext).unwrap();
+/// assert_eq!(decrypted, plaintext);
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if decryption fails, which usually indicates:
+/// - An invalid password or key.
+/// - Corrupted or tampered ciphertext.
+/// - An invalid nonce.
 pub fn decrypt(
     key: &[u8; KEY_SIZE],
     nonce: &[u8; NONCE_SIZE],

@@ -1,3 +1,8 @@
+//! The main entry point for the encrypted journal CLI.
+//!
+//! Orchestrates the terminal alternate screen setup, user password prompt loop,
+//! auto-lock timeouts, workstation suspend locking (Windows), and the central TUI event loop.
+
 mod app;
 mod crypto;
 mod input;
@@ -84,6 +89,7 @@ fn load_or_create_journal(path: &Path) -> Result<JournalState, String> {
     Ok((journal, salt, password, false))
 }
 
+/// Prompts the user to set and confirm a new master password via stdin/stderr.
 fn prompt_new_password() -> Result<String, Box<dyn std::error::Error>> {
     loop {
         let p1 = rpassword::prompt_password("Set master password: ")?;
@@ -100,6 +106,7 @@ fn prompt_new_password() -> Result<String, Box<dyn std::error::Error>> {
     }
 }
 
+/// Executes the core event loop, processing keys and drawing the interface.
 fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,
@@ -144,6 +151,7 @@ where
     Ok(())
 }
 
+/// Detects if the current Windows user session is locked.
 #[cfg(target_os = "windows")]
 fn is_workstation_locked() -> bool {
     #[link(name = "user32")]
