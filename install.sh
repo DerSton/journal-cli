@@ -46,6 +46,7 @@ mkdir -p "$INSTALL_DIR"
 
 # Download binary
 TEMP_FILE="$(mktemp)"
+trap 'rm -f "$TEMP_FILE"' EXIT
 echo "Downloading journal-cli..."
 if command -v curl >/dev/null 2>&1; then
     if ! curl -fsSL "$DOWNLOAD_URL" -o "$TEMP_FILE"; then

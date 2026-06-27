@@ -34,7 +34,7 @@ Write-Host "=== journal-cli Installer ===" -ForegroundColor Cyan
 # Check if 64-bit OS
 if ([Environment]::Is64BitOperatingSystem -eq $false) {
     Write-Error "Error: Currently, prebuilt binaries are only provided for 64-bit Windows."
-    exit 1
+    return
 }
 
 # Create installation directory if it doesn't exist
@@ -56,7 +56,7 @@ try {
     Write-Host "Please ensure that a release has been published at https://github.com/$Repo/releases" -ForegroundColor Yellow
     Write-Host "Details: $_" -ForegroundColor DarkGray
     if (Test-Path $TempPath) { Remove-Item $TempPath }
-    exit 1
+    return
 }
 
 # Replace the old binary with the new one
@@ -69,7 +69,7 @@ try {
     Write-Host "Error: Could not overwrite the existing journal-cli.exe." -ForegroundColor Red
     Write-Host "Please make sure journal-cli is not running and try again." -ForegroundColor Yellow
     if (Test-Path $TempPath) { Remove-Item $TempPath }
-    exit 1
+    return
 }
 
 # Create the jnl alias script (jnl.bat)
