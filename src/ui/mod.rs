@@ -168,6 +168,7 @@ fn help_hints(app: &App) -> Vec<Span<'static>> {
         AppMode::Writing { .. } => match app.active_tab {
             Tab::Journal => {
                 spans.extend(hint("Alt+P", "Mention contact"));
+                spans.extend(hint("Alt+D", "Set date"));
                 spans.extend(hint("Ctrl+S", "Save"));
                 spans.extend(hint("Esc", "Cancel"));
             }

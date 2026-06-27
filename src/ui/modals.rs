@@ -19,7 +19,7 @@ pub fn draw_overlays(f: &mut Frame, app: &App) {
             field_index,
             current_date,
             ..
-        } => draw_date_picker(f, field_index, current_date),
+        } => draw_date_picker(f, app, field_index, current_date),
         _ => {}
     }
 }
@@ -90,11 +90,13 @@ fn draw_contact_picker(f: &mut Frame, app: &App, selected_contact_index: usize) 
     f.render_stateful_widget(list, area, &mut state);
 }
 
-fn draw_date_picker(f: &mut Frame, field_index: usize, current_date: chrono::NaiveDate) {
+fn draw_date_picker(f: &mut Frame, app: &App, field_index: usize, current_date: chrono::NaiveDate) {
     let area = centered_rect_fixed(34, 13, f.area());
     f.render_widget(Clear, area);
 
-    let field_name = if field_index == 0 {
+    let field_name = if app.active_tab == Tab::Journal {
+        "Entry Date"
+    } else if field_index == 0 {
         "Birthdate"
     } else {
         "Date of Death"

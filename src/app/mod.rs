@@ -151,6 +151,8 @@ pub struct App {
     pub ollama_model_index: usize,
     /// Receiver for background thread model list updates.
     pub ollama_models_rx: Option<std::sync::mpsc::Receiver<Vec<String>>>,
+    /// Optional override date for the entry currently being written or edited.
+    pub entry_date_for: Option<chrono::NaiveDate>,
 }
 
 impl App {
@@ -209,6 +211,7 @@ impl App {
             ollama_available_models: default_models,
             ollama_model_index: 0,
             ollama_models_rx: Some(models_rx),
+            entry_date_for: None,
         };
 
         app.sort_entries();
@@ -232,11 +235,11 @@ impl App {
         app
     }
 
-    /// Sorts journal entries by timestamp in descending order (newest first).
+    /// Sorts journal entries by their sort timestamp in descending order (newest first).
     pub fn sort_entries(&mut self) {
         self.journal
             .entries
-            .sort_by_key(|e| std::cmp::Reverse(e.timestamp));
+            .sort_by_key(|e| std::cmp::Reverse(e.sort_timestamp()));
     }
 
     /// Sorts contacts alphabetically by last name, then by first names.
@@ -545,16 +548,19 @@ mod tests {
                 id: "1".to_string(),
                 timestamp: Utc::now(),
                 content: "First entry with rust".to_string(),
+                date_for: None,
             },
             JournalEntry {
                 id: "2".to_string(),
                 timestamp: Utc::now(),
                 content: "Second entry with python".to_string(),
+                date_for: None,
             },
             JournalEntry {
                 id: "3".to_string(),
                 timestamp: Utc::now(),
                 content: "Third entry with rust programming".to_string(),
+                date_for: None,
             },
         ];
 
@@ -605,5 +611,46 @@ mod tests {
 
         app.selected_index = 0;
         assert_eq!(app.selected_contact_idx(), Some(0));
+    }
+
+    #[test]
+    fn test_entry_date_override_sorting() {
+        let mut app = test_app();
+        let base_time = Utc::now();
+
+        // Entry 1: Created today
+        let e1 = JournalEntry {
+            id: "1".to_string(),
+            timestamp: base_time,
+            content: "Today".to_string(),
+            date_for: None,
+        };
+
+        // Entry 2: Created today, but back-dated to 5 days ago
+        let e2 = JournalEntry {
+            id: "2".to_string(),
+            timestamp: base_time + chrono::Duration::seconds(10),
+            content: "Back-dated 5 days ago".to_string(),
+            date_for: Some((base_time - chrono::Duration::days(5)).date_naive()),
+        };
+
+        // Entry 3: Created today, but back-dated to yesterday
+        let e3 = JournalEntry {
+            id: "3".to_string(),
+            timestamp: base_time + chrono::Duration::seconds(20),
+            content: "Back-dated yesterday".to_string(),
+            date_for: Some((base_time - chrono::Duration::days(1)).date_naive()),
+        };
+
+        app.journal.entries = vec![e2.clone(), e1.clone(), e3.clone()];
+        app.sort_entries();
+
+        // After sorting (newest first), order should be:
+        // 1. Entry 1 (Today)
+        // 2. Entry 3 (Yesterday)
+        // 3. Entry 2 (5 days ago)
+        assert_eq!(app.journal.entries[0].id, "1");
+        assert_eq!(app.journal.entries[1].id, "3");
+        assert_eq!(app.journal.entries[2].id, "2");
     }
 }

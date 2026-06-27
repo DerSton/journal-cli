@@ -20,18 +20,28 @@ impl App {
                     id: Uuid::new_v4().to_string(),
                     timestamp: Utc::now(),
                     content,
+                    date_for: self.entry_date_for,
                 });
                 self.sort_entries();
                 self.selected_index = 0;
                 self.status_msg = Some("New entry saved".to_string());
             }
             AppMode::Writing { is_edit: true } => {
+                let mut edited_id = None;
                 if let Some(entry) = self
                     .selected_entry_idx()
                     .and_then(|idx| self.journal.entries.get_mut(idx))
                 {
                     entry.content = content;
+                    entry.date_for = self.entry_date_for;
+                    edited_id = Some(entry.id.clone());
                     self.status_msg = Some("Entry updated".to_string());
+                }
+                self.sort_entries();
+                if let Some(pos) =
+                    edited_id.and_then(|id| self.filtered_entries().iter().position(|e| e.id == id))
+                {
+                    self.selected_index = pos;
                 }
             }
             _ => return,

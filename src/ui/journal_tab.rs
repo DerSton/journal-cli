@@ -25,7 +25,7 @@ fn draw_list(f: &mut Frame, app: &App, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, entry)| {
-            let time_str = app.journal.format_timestamp_short(&entry.timestamp);
+            let time_str = app.journal.format_timestamp_short(&entry.sort_timestamp());
             let snippet = truncate(entry.content.lines().next().unwrap_or("").trim(), 30);
 
             let title_style = if i == app.selected_index {
@@ -55,7 +55,16 @@ fn draw_list(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_editor(f: &mut Frame, app: &mut App, area: Rect, is_edit: bool) {
-    let title = if is_edit { "Edit Entry" } else { "New Entry" };
+    let date_hint = if let Some(d) = app.entry_date_for {
+        format!(" (Gilt für: {})", d.format("%Y-%m-%d"))
+    } else {
+        "".to_string()
+    };
+    let title = format!(
+        "{}{}",
+        if is_edit { "Edit Entry" } else { "New Entry" },
+        date_hint
+    );
     app.textarea.set_block(theme::field_block(title, true));
     app.textarea.set_cursor_line_style(
         ratatui::style::Style::default().bg(ratatui::style::Color::Indexed(235)),
@@ -83,21 +92,27 @@ fn draw_preview(f: &mut Frame, app: &mut App, area: Rect) {
     }
 
     let entry = filtered[app.selected_index];
-    let time_str = app.journal.format_timestamp(&entry.timestamp);
-
+    let date_str = app.journal.format_timestamp(&entry.sort_timestamp());
     let title = format!("Entry {} of {}", app.selected_index + 1, filtered.len());
 
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("Date: ", theme::title_style()),
-            Span::styled(time_str, theme::text_style()),
-        ]),
-        Line::from(Span::styled(
-            "-".repeat((area.width as usize).saturating_sub(4)),
-            theme::muted_style(),
-        )),
-        Line::from(""),
-    ];
+    let mut lines = vec![Line::from(vec![
+        Span::styled("Date:    ", theme::title_style()),
+        Span::styled(date_str, theme::text_style()),
+    ])];
+
+    if entry.date_for.is_some() {
+        let created_str = app.journal.format_timestamp(&entry.timestamp);
+        lines.push(Line::from(vec![
+            Span::styled("Created: ", theme::muted_style()),
+            Span::styled(created_str, theme::muted_style()),
+        ]));
+    }
+
+    lines.push(Line::from(Span::styled(
+        "-".repeat((area.width as usize).saturating_sub(4)),
+        theme::muted_style(),
+    )));
+    lines.push(Line::from(""));
     for line in entry.content.lines() {
         lines.push(render_mentions(line, &app.journal.contacts));
     }

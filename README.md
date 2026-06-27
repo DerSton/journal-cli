@@ -75,6 +75,7 @@ The app is keyboard-driven; on-screen hints show available actions per mode.
 - **Tab switching**: Press `Tab` or numbers `1`–`5` to switch directly between tabs (1: Dashboard, 2: Journal, 3: Contacts, 4: Stats, 5: Settings).
 - **Dashboard**: Press `r` to regenerate the weekly Ollama summary. Use `Up`/`Down`/`PageUp`/`PageDown`/`j`/`k` to scroll the summary text.
 - **Journal**: Press `n` for new entry, `e` to edit, `d`/`Delete` to delete, and `a` to run local KI-Analyse (AI analysis).
+- **Journal editor**: Press `Alt+p` to insert a contact mention, `Alt+d` to select an optional back-date (gilt für), `Ctrl+s` to save, and `Esc` to cancel.
 - **KI-Analyse Review**: Use `Tab` to switch focus between Tags, Contacts, and Diff panels. Press `Space` to toggle selections, `Ctrl+S` to apply, and `Esc` to cancel.
 
 ## File format

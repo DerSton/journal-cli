@@ -94,6 +94,7 @@ fn handle_journal_list(app: &mut App, key: KeyEvent) {
         KeyCode::Char('n') => {
             app.status_msg = None;
             app.error_msg = None;
+            app.entry_date_for = None;
             app.textarea = ratatui_textarea::TextArea::default();
             app.mode = AppMode::Writing { is_edit: false };
         }
@@ -101,7 +102,9 @@ fn handle_journal_list(app: &mut App, key: KeyEvent) {
             app.status_msg = None;
             app.error_msg = None;
             if let Some(real_idx) = app.selected_entry_idx() {
-                let content = app.journal.entries[real_idx].content.clone();
+                let entry = &app.journal.entries[real_idx];
+                app.entry_date_for = entry.date_for;
+                let content = entry.content.clone();
                 app.textarea =
                     ratatui_textarea::TextArea::new(content.lines().map(String::from).collect());
                 app.mode = AppMode::Writing { is_edit: true };
@@ -341,6 +344,14 @@ fn handle_writing(app: &mut App, key: KeyEvent, is_edit: bool) {
                         selected_contact_index: 0,
                     };
                 }
+            } else if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::ALT) {
+                app.mode = AppMode::DatePicker {
+                    is_edit,
+                    field_index: 0,
+                    current_date: app
+                        .entry_date_for
+                        .unwrap_or_else(|| chrono::Local::now().date_naive()),
+                };
             } else if key.code == KeyCode::Char('s')
                 && key.modifiers.contains(KeyModifiers::CONTROL)
             {
@@ -459,7 +470,9 @@ fn handle_date_picker(
             return;
         }
         KeyCode::Char('c') | KeyCode::Char('C') => {
-            if field_index == 0 {
+            if app.active_tab == Tab::Journal {
+                app.entry_date_for = None;
+            } else if field_index == 0 {
                 app.contact_form.birthdate = ratatui_textarea::TextArea::default();
             } else {
                 app.contact_form.date_of_death = ratatui_textarea::TextArea::default();
@@ -468,11 +481,16 @@ fn handle_date_picker(
             return;
         }
         KeyCode::Enter => {
-            let formatted = crate::app::format_localized_date(current_date);
-            if field_index == 0 {
-                app.contact_form.birthdate = ratatui_textarea::TextArea::new(vec![formatted]);
+            if app.active_tab == Tab::Journal {
+                app.entry_date_for = Some(current_date);
             } else {
-                app.contact_form.date_of_death = ratatui_textarea::TextArea::new(vec![formatted]);
+                let formatted = crate::app::format_localized_date(current_date);
+                if field_index == 0 {
+                    app.contact_form.birthdate = ratatui_textarea::TextArea::new(vec![formatted]);
+                } else {
+                    app.contact_form.date_of_death =
+                        ratatui_textarea::TextArea::new(vec![formatted]);
+                }
             }
             app.mode = AppMode::Writing { is_edit };
             return;
