@@ -92,7 +92,6 @@ fn draw_tab_bar(f: &mut Frame, app: &App, area: Rect) {
         tab_span("Stats [3]", Tab::Stats),
         Span::styled(" | ", theme::muted_style()),
         tab_span("Settings [4]", Tab::Settings),
-        Span::styled("   (Tab or 1-4 to switch)", theme::muted_style()),
     ]);
 
     f.render_widget(Paragraph::new(line).block(theme::panel_block("")), area);
@@ -151,7 +150,6 @@ fn help_hints(app: &App) -> Vec<Span<'static>> {
                     }
                     Tab::Stats => {}
                 }
-                spans.extend(hint("Tab", "Switch tab"));
                 spans.extend(hint("q", "Quit"));
             }
         }

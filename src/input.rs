@@ -32,15 +32,6 @@ fn handle_list(app: &mut App, key: KeyEvent) {
 
     match key.code {
         KeyCode::Char('q') => app.should_quit = true,
-        KeyCode::Tab => {
-            let next = match app.active_tab {
-                Tab::Journal => Tab::Contacts,
-                Tab::Contacts => Tab::Stats,
-                Tab::Stats => Tab::Settings,
-                Tab::Settings => Tab::Journal,
-            };
-            app.switch_tab(next);
-        }
         KeyCode::Char('1') => app.switch_tab(Tab::Journal),
         KeyCode::Char('2') => app.switch_tab(Tab::Contacts),
         KeyCode::Char('3') => app.switch_tab(Tab::Stats),
