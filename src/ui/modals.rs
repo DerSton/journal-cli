@@ -44,7 +44,7 @@ fn draw_delete_confirm(f: &mut Frame, app: &App) {
     let text = vec![
         Line::from(""),
         Line::from(format!("Delete this {}?", item)).alignment(Alignment::Center),
-        Line::from("This cannot be undone.").alignment(Alignment::Center),
+        Line::from("This action cannot be undone").alignment(Alignment::Center),
         Line::from(""),
         Line::from(vec![
             Span::styled(" y ", theme::danger_style()),
@@ -69,7 +69,7 @@ fn draw_contact_picker(f: &mut Frame, app: &App, selected_contact_index: usize) 
         .borders(Borders::ALL)
         .border_type(BorderType::Double)
         .border_style(theme::border_style(true))
-        .title(" Mention Contact (Enter: Pick, Esc: Cancel) ");
+        .title(" Mention Contact ");
 
     let items: Vec<ListItem> = app
         .journal
@@ -96,7 +96,7 @@ fn draw_date_picker(f: &mut Frame, app: &App, field_index: usize, current_date: 
     let field_name = if app.active_tab == Tab::Journal {
         "Entry Date"
     } else if field_index == 0 {
-        "Birthdate"
+        "Date of Birth"
     } else {
         "Date of Death"
     };

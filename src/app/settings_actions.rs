@@ -82,7 +82,7 @@ impl App {
             self.settings_num_shares,
         )?;
         self.generated_shares = shares;
-        self.status_msg = Some("Recovery shares generated successfully!".to_string());
+        self.status_msg = Some("Recovery shares generated".to_string());
         Ok(())
     }
 }

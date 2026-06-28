@@ -67,7 +67,7 @@ fn draw_password_panel(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(&app.settings_password_confirm, chunks[1]);
 
     let instructions = if app.settings_panel_focused {
-        "Tab: Next field   Ctrl+S: Save and re-encrypt   Esc: Back to list"
+        "Tab: Next Field | Ctrl+S: Save and Re-Encrypt | Esc: Back to List"
     } else {
         "Enter: Open"
     };
@@ -88,7 +88,7 @@ fn draw_timeout_panel(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let instructions = if app.settings_panel_focused {
-        "Left/Right or Up/Down: Adjust (saves instantly)   Esc: Back to list"
+        "Left/Right or Up/Down: Adjust | Esc: Back to List"
     } else {
         "Enter: Open"
     };
@@ -96,7 +96,7 @@ fn draw_timeout_panel(f: &mut Frame, app: &App, area: Rect) {
     let lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("Inactivity Timeout: ", theme::muted_style()),
+            Span::styled("Inactivity Timeout ", theme::muted_style()),
             Span::styled(format!("< {} >", value), theme::text_style()),
         ])
         .alignment(Alignment::Center),
@@ -116,7 +116,7 @@ fn draw_lock_panel(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let instructions = if app.settings_panel_focused {
-        "Left/Right or Space: Toggle (saves instantly)   Esc: Back to list"
+        "Left/Right or Space: Toggle | Esc: Back to List"
     } else {
         "Enter: Open"
     };
@@ -124,7 +124,7 @@ fn draw_lock_panel(f: &mut Frame, app: &App, area: Rect) {
     let lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("Lock on Workstation Lock: ", theme::muted_style()),
+            Span::styled("Lock on Workstation Lock ", theme::muted_style()),
             Span::styled(format!("< {} >", value), theme::text_style()),
         ])
         .alignment(Alignment::Center),
@@ -139,7 +139,7 @@ fn draw_lock_panel(f: &mut Frame, app: &App, area: Rect) {
 fn draw_recovery_panel(f: &mut Frame, app: &App, area: Rect) {
     let mut lines = vec![
         Line::from(""),
-        Line::from("Split your master password into N shares; any T of them can recover it.")
+        Line::from("Split master password into N shares; any T can recover it")
             .alignment(Alignment::Center)
             .style(theme::muted_style()),
         Line::from(""),
@@ -150,7 +150,7 @@ fn draw_recovery_panel(f: &mut Frame, app: &App, area: Rect) {
 
     lines.push(
         Line::from(vec![
-            Span::styled("Total Shares (N): ", theme::muted_style()),
+            Span::styled("Total Shares (N) ", theme::muted_style()),
             Span::styled(
                 format!(" < {} > ", app.settings_num_shares),
                 if n_focused {
@@ -164,7 +164,7 @@ fn draw_recovery_panel(f: &mut Frame, app: &App, area: Rect) {
     );
     lines.push(
         Line::from(vec![
-            Span::styled("Required Threshold (T): ", theme::muted_style()),
+            Span::styled("Required Threshold (T) ", theme::muted_style()),
             Span::styled(
                 format!(" < {} > ", app.settings_threshold),
                 if t_focused {
@@ -179,7 +179,7 @@ fn draw_recovery_panel(f: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::from(""));
 
     let instructions = if app.settings_panel_focused {
-        "Tab: Switch N/T   Left/Right: Adjust   Ctrl+S: Generate shares   Esc: Back to list"
+        "Tab: Switch N/T | Left/Right: Adjust | Ctrl+S: Generate Shares | Esc: Back to List"
     } else {
         "Enter: Open"
     };
@@ -191,13 +191,11 @@ fn draw_recovery_panel(f: &mut Frame, app: &App, area: Rect) {
 
     if !app.generated_shares.is_empty() {
         lines.push(Line::from(""));
-        lines.push(
-            Line::from("Generated shares (copy and distribute):").style(theme::success_style()),
-        );
+        lines.push(Line::from("Generated Shares").style(theme::success_style()));
         lines.push(Line::from(""));
         for (idx, share) in app.generated_shares.iter().enumerate() {
             lines.push(Line::from(vec![
-                Span::styled(format!("Share {}: ", idx + 1), theme::title_style()),
+                Span::styled(format!("Share {} ", idx + 1), theme::title_style()),
                 Span::styled(share.clone(), theme::text_style()),
             ]));
         }

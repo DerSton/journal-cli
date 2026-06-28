@@ -167,7 +167,7 @@ impl App {
             recovery_textarea: TextArea::default(),
             login_password: String::new(),
             error_msg: None,
-            status_msg: Some("Welcome to your secure journal.".to_string()),
+            status_msg: Some("Welcome to your secure journal".to_string()),
             should_quit: false,
             search_query: String::new(),
             entry_date_for: None,

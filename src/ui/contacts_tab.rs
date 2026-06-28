@@ -52,9 +52,9 @@ fn draw_profile(f: &mut Frame, app: &App, area: Rect) {
     let filtered = app.filtered_contacts();
     if filtered.is_empty() {
         let msg = if !app.search_query.is_empty() {
-            "No contacts found matching search."
+            "No contacts found matching search"
         } else {
-            "No contacts yet. Press 'n' to add one."
+            "No contacts yet. Press 'n' to add one"
         };
         let text = vec![Line::from(""), Line::from(msg).alignment(Alignment::Center)];
         let paragraph = Paragraph::new(text)
@@ -97,13 +97,13 @@ fn draw_profile_card(f: &mut Frame, contact: &Contact, area: Rect) {
     };
 
     if !contact.nickname.is_empty() {
-        field("Nickname:", &contact.nickname);
+        field("Nickname", &contact.nickname);
     }
     if !contact.preferred_name.is_empty() {
-        field("Preferred Name:", &contact.preferred_name);
+        field("Preferred Name", &contact.preferred_name);
     }
     if !contact.maiden_name.is_empty() {
-        field("Maiden Name:", &contact.maiden_name);
+        field("Maiden Name", &contact.maiden_name);
     }
 
     if let Some(birth) = contact.birthdate {
@@ -116,7 +116,7 @@ fn draw_profile_card(f: &mut Frame, contact: &Contact, area: Rect) {
             String::new()
         };
         field(
-            "Born:",
+            "Born",
             &format!("{}{}", crate::app::format_localized_date(birth), age),
         );
     }
@@ -126,30 +126,30 @@ fn draw_profile_card(f: &mut Frame, contact: &Contact, area: Rect) {
             .map(|a| format!(" (Aged {})", a))
             .unwrap_or_default();
         field(
-            "Deceased:",
+            "Deceased",
             &format!("{}{}", crate::app::format_localized_date(death), age),
         );
     }
 
-    field("Gender:", &contact.gender);
-    field("Pronouns:", &contact.pronouns);
-    field("Nationalities:", &contact.nationalities.join(", "));
-    field("Languages:", &contact.languages.join(", "));
+    field("Gender", &contact.gender);
+    field("Pronouns", &contact.pronouns);
+    field("Nationalities", &contact.nationalities.join(", "));
+    field("Languages", &contact.languages.join(", "));
     if contact.marital_status != "N/A" {
-        field("Marital Status:", &contact.marital_status);
+        field("Marital Status", &contact.marital_status);
     }
-    field("Religion:", &contact.religion);
+    field("Religion", &contact.religion);
     if contact.blood_type != "N/A" {
-        field("Blood Type:", &contact.blood_type);
+        field("Blood Type", &contact.blood_type);
     }
-    field("Eye Color:", &contact.eye_color);
-    field("Hair Color:", &contact.hair_color);
+    field("Eye Color", &contact.eye_color);
+    field("Hair Color", &contact.hair_color);
     if let Some(h) = contact.height {
-        field("Height:", &format!("{} cm", h));
+        field("Height", &format!("{} cm", h));
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled("  Notes:", theme::title_style())));
+    lines.push(Line::from(Span::styled("  Notes", theme::title_style())));
     if contact.notes.is_empty() {
         lines.push(Line::from(Span::styled("  -", theme::muted_style())));
     } else {
@@ -176,7 +176,7 @@ fn draw_mentions_panel(f: &mut Frame, app: &App, contact: &Contact, area: Rect) 
     if mentions.is_empty() {
         let text = vec![
             Line::from(""),
-            Line::from(format!("No mentions of {} found.", contact.full_name()))
+            Line::from(format!("No mentions of {} found", contact.full_name()))
                 .alignment(Alignment::Center)
                 .style(theme::muted_style()),
         ];
@@ -196,7 +196,7 @@ fn draw_mentions_panel(f: &mut Frame, app: &App, contact: &Contact, area: Rect) 
                 snippet.to_string()
             };
             ListItem::new(Line::from(vec![
-                Span::styled(format!(" {}: ", date), theme::title_style()),
+                Span::styled(format!(" {} ", date), theme::title_style()),
                 Span::styled(snippet, theme::text_style()),
             ]))
         })
@@ -225,11 +225,11 @@ fn field_label(field: ContactField) -> String {
         ContactField::Suffix => "Suffix".to_string(),
         ContactField::Birthdate => {
             let (placeholder, _) = crate::app::get_date_format_info();
-            format!("Birthdate ({})", placeholder)
+            format!("Date of Birth ({})", placeholder)
         }
         ContactField::DateOfDeath => {
             let (placeholder, _) = crate::app::get_date_format_info();
-            format!("Date of Death ({}, optional)", placeholder)
+            format!("Date of Death ({})", placeholder)
         }
         ContactField::Gender => "Gender".to_string(),
         ContactField::Pronouns => "Pronouns".to_string(),

@@ -564,13 +564,13 @@ fn submit_recovery_share(app: &mut App) {
 
     app.recovery_shares.push(share_str);
     app.recovery_textarea = ratatui_textarea::TextArea::default();
-    app.recovery_status_msg = Some(format!("Added share {}.", parsed.index));
+    app.recovery_status_msg = Some(format!("Added share {}", parsed.index));
 
     if app.recovery_shares.len() < parsed.threshold {
         return;
     }
 
-    app.recovery_status_msg = Some("Threshold met. Reconstructing password...".to_string());
+    app.recovery_status_msg = Some("Reconstructing password".to_string());
     let reconstructed = match crate::crypto::reconstruct_password(&app.recovery_shares) {
         Ok(pwd) => pwd,
         Err(e) => {

@@ -60,7 +60,7 @@ fn draw_list(f: &mut Frame, app: &App, area: Rect) {
 
 fn draw_editor(f: &mut Frame, app: &mut App, area: Rect, is_edit: bool) {
     let date_hint = if let Some(d) = app.entry_date_for {
-        format!(" (Gilt für: {})", d.format("%Y-%m-%d"))
+        format!(" (Valid for: {})", d.format("%Y-%m-%d"))
     } else {
         "".to_string()
     };
@@ -80,9 +80,9 @@ fn draw_preview(f: &mut Frame, app: &mut App, area: Rect) {
     let filtered = app.filtered_entries();
     if filtered.is_empty() {
         let msg = if !app.search_query.is_empty() {
-            "No entries found matching search."
+            "No entries found matching search"
         } else {
-            "No entries yet. Press 'n' to write one."
+            "No entries yet. Press 'n' to write one"
         };
         let text = vec![
             Line::from(""),

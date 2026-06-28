@@ -110,7 +110,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     kpi_lines.push(Line::from(vec![
         Span::styled(" Current Streak: ", theme::title_style()),
         Span::styled(
-            format!("{} day(s) 🔥", current_streak),
+            format!("{} day(s)", current_streak),
             if current_streak > 0 {
                 theme::success_style()
             } else {
@@ -120,7 +120,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     ]));
     kpi_lines.push(Line::from(vec![
         Span::styled(" Record Streak:  ", theme::title_style()),
-        Span::styled(format!("{} day(s) 🏆", max_streak), theme::text_style()),
+        Span::styled(format!("{} day(s)", max_streak), theme::text_style()),
     ]));
 
     let kpi_paragraph = Paragraph::new(kpi_lines)
@@ -133,7 +133,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     if top_contacts.is_empty() {
         contact_lines.push(Line::from(""));
         contact_lines.push(Line::from(Span::styled(
-            " No contact mentions found yet.",
+            " No contact mentions found",
             theme::muted_style(),
         )));
     } else {
@@ -173,8 +173,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     if bar_data.is_empty() {
         let empty_p = Paragraph::new(vec![
             Line::from(""),
-            Line::from(" No entries to display chart.")
-                .alignment(ratatui::layout::Alignment::Center),
+            Line::from("No entries to display chart").alignment(ratatui::layout::Alignment::Center),
         ])
         .block(chart_block);
         f.render_widget(empty_p, bottom_chunks[0]);
@@ -193,7 +192,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     // Untere Reihe rechts: Wortwolke
     let mut cloud_spans = Vec::new();
     if common_words.is_empty() {
-        cloud_spans.push(Span::styled(" No words found yet.", theme::muted_style()));
+        cloud_spans.push(Span::styled("No words found", theme::muted_style()));
     } else {
         for (i, (word, count)) in common_words.iter().enumerate() {
             if i > 0 {
