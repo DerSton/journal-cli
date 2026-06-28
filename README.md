@@ -16,9 +16,9 @@ jnl my-journal.jrnl
 - **Stats tab** — view entry streaks, total and average word counts, top contact mentions, and a word-count history chart for recent entries.
 - **Settings tab** — change your master password, set an inactivity auto-lock timeout, lock on workstation suspend (Windows), generate recovery shares, toggle Ollama weekly summaries, and cycle through available local Ollama models.
 - **Local AI Analysis (KI-Analyse)** — fully offline analysis of journal entries. Press `a` in the Journal list to perform:
-  - *Spelling & Formatting corrections* with a visual diff confirmation pane.
-  - *Automatic contact linking* (linking names in text to database contacts with manual confirmation).
-  - *Strict tag suggestions* stored separately in the database JSON.
+  - _Spelling & Formatting corrections_ with a visual diff confirmation pane.
+  - _Automatic contact linking_ (linking names in text to database contacts with manual confirmation).
+  - _Strict tag suggestions_ stored separately in the database JSON.
 - **Password recovery** — master password can be split into Shamir secret-sharing shares, so you can recover access without ever storing the password itself.
 - **Transactional saves** — password changes and journal writes go through a temp-file + rename, so a crash mid-write can't corrupt your journal.
 
@@ -72,6 +72,7 @@ Run `jnl --help` for the full option list, `jnl --version` for the version.
 ### Key bindings
 
 The app is keyboard-driven; on-screen hints show available actions per mode.
+
 - **Tab switching**: Press `Tab` or numbers `1`–`5` to switch directly between tabs (1: Dashboard, 2: Journal, 3: Contacts, 4: Stats, 5: Settings).
 - **Dashboard**: Press `r` to regenerate the weekly Ollama summary. Use `Up`/`Down`/`PageUp`/`PageDown`/`j`/`k` to scroll the summary text.
 - **Journal**: Press `n` for new entry, `e` to edit, `d`/`Delete` to delete, and `a` to run local KI-Analyse (AI analysis).

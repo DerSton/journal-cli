@@ -83,6 +83,15 @@ impl Journal {
         local_dt.format_localized("%Y-%m-%d", locale).to_string()
     }
 
+    /// Formats a timestamp into a human-readable localized date string without time (e.g. "Tuesday, June 16, 2026").
+    pub fn format_date(&self, timestamp: &chrono::DateTime<chrono::Utc>) -> String {
+        let local_dt = timestamp.with_timezone(&chrono::Local);
+        let locale = get_system_locale();
+        local_dt
+            .format_localized("%A, %B %d, %Y", locale)
+            .to_string()
+    }
+
     /// Loads and decrypts a journal file using the provided password.
     ///
     /// # Errors

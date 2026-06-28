@@ -25,7 +25,11 @@ fn draw_list(f: &mut Frame, app: &App, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, entry)| {
-            let time_str = app.journal.format_timestamp_short(&entry.sort_timestamp());
+            let time_str = if entry.date_for.is_some() {
+                app.journal.format_date_short(&entry.sort_timestamp())
+            } else {
+                app.journal.format_timestamp_short(&entry.timestamp)
+            };
             let snippet = truncate(entry.content.lines().next().unwrap_or("").trim(), 30);
 
             let title_style = if i == app.selected_index {
@@ -92,7 +96,11 @@ fn draw_preview(f: &mut Frame, app: &mut App, area: Rect) {
     }
 
     let entry = filtered[app.selected_index];
-    let date_str = app.journal.format_timestamp(&entry.sort_timestamp());
+    let date_str = if entry.date_for.is_some() {
+        app.journal.format_date(&entry.sort_timestamp())
+    } else {
+        app.journal.format_timestamp(&entry.timestamp)
+    };
     let title = format!("Entry {} of {}", app.selected_index + 1, filtered.len());
 
     let mut lines = vec![Line::from(vec![

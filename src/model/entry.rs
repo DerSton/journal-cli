@@ -19,15 +19,16 @@ pub struct JournalEntry {
 
 impl JournalEntry {
     /// Returns the timestamp used for sorting. If `date_for` is set,
-    /// it shifts the date part while keeping the original creation time part.
+    /// it treats the entry as written at 23:59:59 local time on that date.
     pub fn sort_timestamp(&self) -> DateTime<Utc> {
         if let Some(date) = self.date_for {
             use chrono::TimeZone;
-            let time_part = self.timestamp.time();
-            if let Some(dt) = Utc.from_local_datetime(&date.and_time(time_part)).single() {
-                dt
+            let local_time = chrono::NaiveTime::from_hms_opt(23, 59, 59).unwrap();
+            let local_dt = date.and_time(local_time);
+            if let Some(dt) = chrono::Local.from_local_datetime(&local_dt).single() {
+                dt.with_timezone(&Utc)
             } else {
-                date.and_hms_opt(0, 0, 0)
+                date.and_hms_opt(23, 59, 59)
                     .and_then(|naive| Utc.from_local_datetime(&naive).single())
                     .unwrap_or(self.timestamp)
             }
