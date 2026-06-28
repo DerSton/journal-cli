@@ -76,12 +76,12 @@ pub fn encrypt(
     nonce: &[u8; NONCE_SIZE],
     plaintext: &[u8],
 ) -> Result<Vec<u8>, String> {
-    let key_ref = Key::from_slice(key);
-    let cipher = ChaCha20Poly1305::new(key_ref);
-    let nonce_ref = Nonce::from_slice(nonce);
+    let key_ref = Key::from(*key);
+    let cipher = ChaCha20Poly1305::new(&key_ref);
+    let nonce_ref = Nonce::from(*nonce);
 
     cipher
-        .encrypt(nonce_ref, plaintext)
+        .encrypt(&nonce_ref, plaintext)
         .map_err(|e| format!("Encryption failed: {}", e))
 }
 
@@ -111,11 +111,11 @@ pub fn decrypt(
     nonce: &[u8; NONCE_SIZE],
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, String> {
-    let key_ref = Key::from_slice(key);
-    let cipher = ChaCha20Poly1305::new(key_ref);
-    let nonce_ref = Nonce::from_slice(nonce);
+    let key_ref = Key::from(*key);
+    let cipher = ChaCha20Poly1305::new(&key_ref);
+    let nonce_ref = Nonce::from(*nonce);
 
-    cipher.decrypt(nonce_ref, ciphertext).map_err(|e| {
+    cipher.decrypt(&nonce_ref, ciphertext).map_err(|e| {
         format!(
             "Decryption failed (invalid password or corrupted file): {}",
             e
