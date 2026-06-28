@@ -1,21 +1,27 @@
+//! Root UI dispatcher.
+//!
+//! Handles the top-level layout split (tab bar → main content → status bar),
+//! dispatches to per-tab renderers, and draws transient overlays last.
+
 mod auth;
 mod contacts_tab;
 mod journal_tab;
 mod modals;
 mod settings_tab;
 mod stats_tab;
-mod theme;
+pub mod theme;
 
 use crate::app::{App, AppMode, Tab};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Layout, Rect},
     text::{Line, Span},
-    widgets::{Paragraph, Tabs},
+    widgets::Paragraph,
 };
 
-/// Main UI entry point: dispatches to a full-screen mode or the tabbed main view.
+/// Entry point called once per frame by the event loop.
 pub fn draw(f: &mut Frame, app: &mut App) {
+    // Full-screen modes bypass the tab shell entirely.
     match app.mode {
         AppMode::Login => return auth::draw_login(f, app),
         AppMode::Recovery => return auth::draw_recovery(f, app),
@@ -23,227 +29,260 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         _ => {}
     }
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(0),
-            Constraint::Length(3),
-        ])
-        .split(f.area());
+    let [tab_area, main_area, status_area] = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Min(0),
+        Constraint::Length(3),
+    ])
+    .areas(f.area());
 
-    draw_tab_bar(f, app, chunks[0]);
+    draw_tab_bar(f, app, tab_area);
+    draw_main(f, app, main_area);
+    draw_status_bar(f, app, status_area);
 
-    let main_area = chunks[1];
-    if app.active_tab == Tab::Stats {
-        stats_tab::draw(f, app, main_area);
-    } else {
-        let main_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
-            .split(main_area);
-        let list_area = main_chunks[0];
-        let content_area = main_chunks[1];
-        let is_searchable_tab = matches!(app.active_tab, Tab::Journal | Tab::Contacts);
-        let list_area =
-            if is_searchable_tab && (app.mode == AppMode::Search || !app.search_query.is_empty()) {
-                let list_layout = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([Constraint::Length(3), Constraint::Min(0)])
-                    .split(list_area);
-
-                draw_search_box(f, app, list_layout[0]);
-
-                list_layout[1]
-            } else {
-                list_area
-            };
-
-        match app.active_tab {
-            Tab::Journal => journal_tab::draw(f, app, list_area, content_area),
-            Tab::Contacts => contacts_tab::draw(f, app, list_area, content_area),
-            Tab::Settings => settings_tab::draw(f, app, list_area, content_area),
-            Tab::Stats => {}
-        }
-    }
-
-    draw_status_bar(f, app, chunks[2]);
+    // Overlays are always painted on top.
     modals::draw_overlays(f, app);
 }
 
+// ── Tab bar ───────────────────────────────────────────────────────────────────
+
 fn draw_tab_bar(f: &mut Frame, app: &App, area: Rect) {
-    let titles = vec![
-        Line::from("Journal [1]"),
-        Line::from("Contacts [2]"),
-        Line::from("Stats [3]"),
-        Line::from("Settings [4]"),
+    let tabs = [
+        ("  Journal ", Tab::Journal),
+        ("  People  ", Tab::Contacts),
+        ("  Insights", Tab::Stats),
+        ("  Settings", Tab::Settings),
     ];
+    let hints = ["[1]", "[2]", "[3]", "[4]"];
 
-    let selected_index = match app.active_tab {
-        Tab::Journal => 0,
-        Tab::Contacts => 1,
-        Tab::Stats => 2,
-        Tab::Settings => 3,
-    };
+    let mut spans: Vec<Span> = Vec::new();
 
-    let tabs = Tabs::new(titles)
-        .block(theme::panel_block(""))
-        .select(selected_index)
-        .style(theme::muted_style())
-        .highlight_style(theme::title_style())
-        .divider(Span::styled(" | ", theme::muted_style()));
+    for (i, ((label, tab), hint)) in tabs.iter().zip(hints).enumerate() {
+        let active = app.active_tab == *tab;
 
-    f.render_widget(tabs, area);
+        let label_style = if active {
+            theme::accent()
+        } else {
+            theme::muted()
+        };
+        let hint_style = theme::dim();
+
+        if i > 0 {
+            spans.push(Span::styled("  ", theme::muted()));
+        }
+
+        spans.push(Span::styled(*label, label_style));
+        spans.push(Span::styled(format!(" {} ", hint), hint_style));
+    }
+
+    let bar = Paragraph::new(Line::from(spans)).block(theme::panel(""));
+    f.render_widget(bar, area);
 }
 
-fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {
-    let spans = if let Some(ref err) = app.error_msg {
-        vec![Span::styled(err.clone(), theme::danger_style())]
-    } else if let Some(ref status) = app.status_msg {
-        vec![Span::styled(status.clone(), theme::success_style())]
+// ── Main content ──────────────────────────────────────────────────────────────
+
+fn draw_main(f: &mut Frame, app: &mut App, area: Rect) {
+    // Stats tab uses the entire area as a dashboard — no list/detail split.
+    if app.active_tab == Tab::Stats {
+        return stats_tab::draw(f, app, area);
+    }
+
+    let [list_area, content_area] =
+        Layout::horizontal([Constraint::Percentage(33), Constraint::Percentage(67)]).areas(area);
+
+    // Search box consumes the top of the list panel when active.
+    let list_area = if matches!(app.active_tab, Tab::Journal | Tab::Contacts)
+        && (app.mode == AppMode::Search || !app.search_query.is_empty())
+    {
+        let [search_area, remainder] =
+            Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(list_area);
+        draw_search_box(f, app, search_area);
+        remainder
     } else {
-        help_hints(app)
+        list_area
     };
 
-    let block = theme::panel_block("");
+    match app.active_tab {
+        Tab::Journal => journal_tab::draw(f, app, list_area, content_area),
+        Tab::Contacts => contacts_tab::draw(f, app, list_area, content_area),
+        Tab::Settings => settings_tab::draw(f, app, list_area, content_area),
+        Tab::Stats => {} // handled above
+    }
+}
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+
+fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {
+    let block = theme::panel("");
     let inner = block.inner(area);
     f.render_widget(block, area);
+
+    let content = if let Some(ref err) = app.error_msg {
+        Line::from(Span::styled(format!("  ✕  {}", err), theme::danger()))
+    } else if let Some(ref msg) = app.status_msg {
+        Line::from(Span::styled(format!("  ✓  {}", msg), theme::success()))
+    } else {
+        Line::from(build_hint_spans(app))
+    };
+
     f.render_widget(
-        Paragraph::new(Line::from(spans)).alignment(ratatui::layout::Alignment::Center),
+        Paragraph::new(content).alignment(ratatui::layout::Alignment::Center),
         inner,
     );
 }
 
-fn hint(key: &str, action: &str) -> Vec<Span<'static>> {
-    vec![
-        Span::styled(format!(" {}: ", key), theme::title_style()),
-        Span::styled(format!("{} ", action), theme::text_style()),
-    ]
+fn key(k: &str) -> Span<'static> {
+    Span::styled(format!(" {} ", k), theme::accent())
 }
 
-fn help_hints(app: &App) -> Vec<Span<'static>> {
-    let mut spans = Vec::new();
+fn sep() -> Span<'static> {
+    Span::styled("  ", theme::muted())
+}
+
+fn action(a: &str) -> Span<'static> {
+    Span::styled(format!("{} ", a), theme::muted())
+}
+
+fn hint_pair(k: &str, a: &str) -> [Span<'static>; 3] {
+    [key(k), action(a), sep()]
+}
+
+fn build_hint_spans(app: &App) -> Vec<Span<'static>> {
+    let mut v: Vec<Span> = Vec::new();
+
     match app.mode {
         AppMode::List => {
             if app.active_tab == Tab::Settings && app.settings_panel_focused {
-                spans.extend(hint("Esc", "Back to list"));
-                spans.extend(hint("Ctrl+S", "Save"));
+                v.extend(hint_pair("Ctrl+S", "Save"));
+                v.extend(hint_pair("Esc", "Back"));
             } else {
                 match app.active_tab {
                     Tab::Journal => {
-                        spans.extend(hint("/", "Search"));
-                        spans.extend(hint("n", "New entry"));
-                        spans.extend(hint("e", "Edit"));
-                        spans.extend(hint("d", "Delete"));
-                        spans.extend(hint("PgUp/PgDn", "Scroll preview"));
+                        v.extend(hint_pair("/", "Search"));
+                        v.extend(hint_pair("n", "New entry"));
+                        v.extend(hint_pair("e", "Edit"));
+                        v.extend(hint_pair("d", "Delete"));
+                        v.extend(hint_pair("PgUp/Dn", "Scroll"));
                     }
                     Tab::Contacts => {
-                        spans.extend(hint("/", "Search"));
-                        spans.extend(hint("n", "New contact"));
-                        spans.extend(hint("e", "Edit"));
-                        spans.extend(hint("d", "Delete"));
+                        v.extend(hint_pair("/", "Search"));
+                        v.extend(hint_pair("n", "New contact"));
+                        v.extend(hint_pair("e", "Edit"));
+                        v.extend(hint_pair("d", "Delete"));
                     }
                     Tab::Settings => {
-                        spans.extend(hint("Up/Down", "Select group"));
-                        spans.extend(hint("Enter", "Open"));
+                        v.extend(hint_pair("↑↓", "Navigate"));
+                        v.extend(hint_pair("Enter", "Open"));
                     }
                     Tab::Stats => {}
                 }
-                spans.extend(hint("q", "Quit"));
+                v.extend(hint_pair("q", "Quit"));
             }
         }
         AppMode::Writing { .. } => match app.active_tab {
             Tab::Journal => {
-                spans.extend(hint("Alt+P", "Mention contact"));
-                spans.extend(hint("Alt+D", "Set date"));
-                spans.extend(hint("Ctrl+S", "Save"));
-                spans.extend(hint("Esc", "Cancel"));
+                v.extend(hint_pair("Alt+P", "Mention person"));
+                v.extend(hint_pair("Alt+D", "Set date"));
+                v.extend(hint_pair("Ctrl+S", "Save"));
+                v.extend(hint_pair("Esc", "Cancel"));
             }
             Tab::Contacts => {
-                spans.extend(hint("Tab/Shift+Tab", "Next/prev field"));
-                spans.extend(hint("Ctrl+S", "Save"));
-                spans.extend(hint("Esc", "Cancel"));
+                v.extend(hint_pair("Tab/⇧Tab", "Next/prev field"));
+                v.extend(hint_pair("Ctrl+S", "Save"));
+                v.extend(hint_pair("Esc", "Cancel"));
             }
             Tab::Settings | Tab::Stats => {}
         },
         AppMode::ContactPicker { .. } => {
-            spans.extend(hint("Up/Down", "Select contact"));
-            spans.extend(hint("Enter", "Mention"));
-            spans.extend(hint("Esc", "Cancel"));
+            v.extend(hint_pair("↑↓", "Select"));
+            v.extend(hint_pair("Enter", "Insert mention"));
+            v.extend(hint_pair("Esc", "Cancel"));
         }
         AppMode::DatePicker { .. } => {
-            spans.extend(hint("Arrows", "Navigate"));
-            spans.extend(hint("PgUp/PgDn", "Month"));
-            spans.extend(hint("{ }", "Year"));
-            spans.extend(hint("Enter", "Pick"));
-            spans.extend(hint("c", "Clear"));
-            spans.extend(hint("Esc", "Cancel"));
+            v.extend(hint_pair("←→↑↓", "Navigate"));
+            v.extend(hint_pair("PgUp/Dn", "Month"));
+            v.extend(hint_pair("{ }", "Year"));
+            v.extend(hint_pair("Enter", "Confirm"));
+            v.extend(hint_pair("c", "Clear"));
+            v.extend(hint_pair("Esc", "Cancel"));
         }
         AppMode::DeleteConfirm => {
-            spans.extend(hint("y", "Yes, delete"));
-            spans.extend(hint("n / Esc", "Cancel"));
+            v.extend(hint_pair("y", "Confirm delete"));
+            v.extend(hint_pair("n / Esc", "Cancel"));
+        }
+        AppMode::Search => {
+            v.extend(hint_pair("Enter", "Lock filter"));
+            v.extend(hint_pair("Esc", "Clear"));
         }
         AppMode::Login | AppMode::Recovery | AppMode::RecoveryReset => {}
-        AppMode::Search => {
-            spans.extend(hint("Enter", "Lock search"));
-            spans.extend(hint("Esc", "Clear search"));
-        }
     }
-    spans
+
+    v
 }
 
-/// Centers a modal that takes a percentage of the available area.
-pub(crate) fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let vertical = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(vertical[1])[1]
-}
-
-/// Centers a modal with a fixed pixel size.
-pub(crate) fn centered_rect_fixed(width: u16, height: u16, r: Rect) -> Rect {
-    let vertical = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(r.height.saturating_sub(height) / 2),
-            Constraint::Length(height),
-            Constraint::Min(0),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(r.width.saturating_sub(width) / 2),
-            Constraint::Length(width),
-            Constraint::Min(0),
-        ])
-        .split(vertical[1])[1]
-}
+// ── Search box ────────────────────────────────────────────────────────────────
 
 fn draw_search_box(f: &mut Frame, app: &App, area: Rect) {
     let focused = app.mode == AppMode::Search;
-    let block = theme::field_block("Search (Enter to lock, Esc to clear)", focused);
-
-    let display_str = if focused {
+    let display = if focused {
         format!("{}_", app.search_query)
     } else {
         app.search_query.clone()
     };
 
-    let p = Paragraph::new(Line::from(Span::styled(display_str, theme::text_style()))).block(block);
+    let label = if focused {
+        "Search (Enter to lock · Esc to clear)"
+    } else {
+        "Search"
+    };
+
+    let p = Paragraph::new(Line::from(Span::styled(
+        format!(" {}", display),
+        theme::text(),
+    )))
+    .block(theme::field(label, focused));
     f.render_widget(p, area);
+}
+
+// ── Layout helpers ────────────────────────────────────────────────────────────
+
+/// Returns a [`Rect`] centred within `r`, taking a percentage of each dimension.
+pub(crate) fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let margin_v = (100 - percent_y) / 2;
+    let margin_h = (100 - percent_x) / 2;
+
+    let [_, mid, _] = Layout::vertical([
+        Constraint::Percentage(margin_v),
+        Constraint::Percentage(percent_y),
+        Constraint::Percentage(margin_v),
+    ])
+    .areas(r);
+
+    let [_, center, _] = Layout::horizontal([
+        Constraint::Percentage(margin_h),
+        Constraint::Percentage(percent_x),
+        Constraint::Percentage(margin_h),
+    ])
+    .areas(mid);
+
+    center
+}
+
+/// Returns a [`Rect`] centred within `r` with fixed pixel dimensions.
+pub(crate) fn centered_rect_fixed(width: u16, height: u16, r: Rect) -> Rect {
+    let [_, mid, _] = Layout::vertical([
+        Constraint::Length(r.height.saturating_sub(height) / 2),
+        Constraint::Length(height),
+        Constraint::Min(0),
+    ])
+    .areas(r);
+
+    let [_, center, _] = Layout::horizontal([
+        Constraint::Length(r.width.saturating_sub(width) / 2),
+        Constraint::Length(width),
+        Constraint::Min(0),
+    ])
+    .areas(mid);
+
+    center
 }

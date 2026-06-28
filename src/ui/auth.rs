@@ -1,3 +1,8 @@
+//! Authentication screens — login, password recovery, and post-recovery password reset.
+//!
+//! These full-screen modes bypass the normal tab shell and are rendered directly
+//! over the terminal's alternate screen.
+
 use super::{centered_rect, theme};
 use crate::app::App;
 use ratatui::{
@@ -7,12 +12,15 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-pub fn draw_login(f: &mut Frame, app: &App) {
-    let area = centered_rect(60, 40, f.area());
-    let block = theme::field_block("Journal Locked", true);
+// ── Login ─────────────────────────────────────────────────────────────────────
 
-    let masked = "*".repeat(app.login_password.len());
-    let chunks = Layout::default()
+pub fn draw_login(f: &mut Frame, app: &App) {
+    let area = centered_rect(54, 44, f.area());
+    let block = theme::modal("  Vault Locked");
+
+    let masked = "●".repeat(app.login_password.len());
+
+    let [_, input_area, _, info_area] = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),
@@ -20,110 +28,143 @@ pub fn draw_login(f: &mut Frame, app: &App) {
             Constraint::Length(1),
             Constraint::Min(0),
         ])
-        .split(block.inner(area));
+        .areas(block.inner(area));
 
-    let input =
-        Paragraph::new(format!(" {}_", masked)).block(theme::field_block("Master Password", false));
+    // Render the outer modal frame first.
+    f.render_widget(block, area);
 
-    let mut lines = vec![
-        Line::from("Press Enter to Unlock"),
+    // Password input row.
+    f.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            format!(" {}▌", masked),
+            theme::text(),
+        )))
+        .block(theme::field("Master password", true)),
+        input_area,
+    );
+
+    // Info / hint block below.
+    let mut info_lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("Ctrl+R", theme::title_style()),
-            Span::raw(" - Recovery Mode"),
-        ]),
+            Span::styled("  Enter", theme::accent()),
+            Span::styled("  Unlock", theme::muted()),
+            Span::styled("     Ctrl+R", theme::accent()),
+            Span::styled("  Recovery mode", theme::muted()),
+            Span::styled("     Esc", theme::accent()),
+            Span::styled("  Quit", theme::muted()),
+        ])
+        .alignment(Alignment::Center),
         Line::from(""),
-        Line::from(env!("APP_VERSION")).style(theme::muted_style()),
+        Line::from(Span::styled(env!("APP_VERSION"), theme::dim())).alignment(Alignment::Center),
     ];
+
     if let Some(ref err) = app.error_msg {
-        lines.insert(0, Line::from(""));
-        lines.insert(0, Line::from(err.as_str()).style(theme::danger_style()));
+        info_lines.insert(0, Line::from(""));
+        info_lines.insert(
+            0,
+            Line::from(Span::styled(format!("  ✕  {}", err), theme::danger()))
+                .alignment(Alignment::Center),
+        );
     }
 
-    f.render_widget(block, area);
-    f.render_widget(input, chunks[1]);
     f.render_widget(
-        Paragraph::new(lines).alignment(Alignment::Center),
-        chunks[3],
+        Paragraph::new(info_lines).alignment(Alignment::Center),
+        info_area,
     );
 }
 
-pub fn draw_recovery(f: &mut Frame, app: &mut App) {
-    let area = centered_rect(80, 75, f.area());
-    let block = theme::field_block("Recovery Mode", true);
+// ── Recovery ──────────────────────────────────────────────────────────────────
 
-    let chunks = Layout::default()
+pub fn draw_recovery(f: &mut Frame, app: &mut App) {
+    let area = centered_rect(80, 78, f.area());
+    let block = theme::modal("  Recovery Mode");
+
+    let [header_area, input_area, _, shares_area, footer_area] = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(2),
+            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(1),
             Constraint::Min(0),
             Constraint::Length(3),
         ])
-        .split(block.inner(area));
+        .areas(block.inner(area));
 
-    let header = Paragraph::new(vec![
-        Line::from("Enter your recovery shares one at a time"),
-        Line::from("The journal unlocks automatically once enough shares are entered"),
-    ])
-    .alignment(Alignment::Center)
-    .style(theme::muted_style());
+    f.render_widget(block, area);
 
+    // Header instructions.
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from(Span::styled(
+                "Enter your recovery shares one at a time.",
+                theme::muted(),
+            ))
+            .alignment(Alignment::Center),
+            Line::from(Span::styled(
+                "The journal unlocks automatically once enough valid shares are provided.",
+                theme::dim(),
+            ))
+            .alignment(Alignment::Center),
+        ]),
+        header_area,
+    );
+
+    // Share input.
     app.recovery_textarea
-        .set_block(theme::field_block("Recovery Share", true));
+        .set_block(theme::field("Recovery share", true));
+    f.render_widget(&app.recovery_textarea, input_area);
 
+    // Entered shares list.
     let mut share_lines = vec![
-        Line::from("Entered Shares").style(theme::title_style()),
+        Line::from(Span::styled("  Entered shares", theme::label())),
         Line::from(""),
     ];
     if app.recovery_shares.is_empty() {
-        share_lines.push(Line::from("  (none yet)").style(theme::muted_style()));
+        share_lines.push(Line::from(Span::styled("  (none yet)", theme::dim())));
     } else {
-        for (idx, share) in app.recovery_shares.iter().enumerate() {
+        for (i, share) in app.recovery_shares.iter().enumerate() {
             share_lines.push(Line::from(vec![
-                Span::styled(format!("  Share {}: ", idx + 1), theme::success_style()),
+                Span::styled(format!("  Share {:>2}  ", i + 1), theme::success()),
                 Span::raw(share.as_str()),
             ]));
         }
     }
+    f.render_widget(Paragraph::new(share_lines), shares_area);
 
-    let mut footer = vec![];
-    if let Some(ref status) = app.recovery_status_msg {
-        footer.push(Line::from(status.as_str()).style(theme::success_style()));
+    // Footer: status/error + keybinds.
+    let status_line = if let Some(ref msg) = app.recovery_status_msg {
+        Line::from(Span::styled(format!("  ✓  {}", msg), theme::success()))
+            .alignment(Alignment::Center)
     } else if let Some(ref err) = app.error_msg {
-        footer.push(Line::from(err.as_str()).style(theme::danger_style()));
+        Line::from(Span::styled(format!("  ✕  {}", err), theme::danger()))
+            .alignment(Alignment::Center)
     } else {
-        footer.push(Line::from(""));
-    }
-    footer.push(
-        Line::from(vec![
-            Span::styled("Enter", theme::title_style()),
-            Span::raw(" - Submit Share   "),
-            Span::styled("Esc", theme::title_style()),
-            Span::raw(" - Back to Login"),
-        ])
-        .alignment(Alignment::Center),
-    );
+        Line::from("")
+    };
 
-    f.render_widget(block, area);
-    f.render_widget(header, chunks[0]);
-    f.render_widget(&app.recovery_textarea, chunks[1]);
     f.render_widget(
-        Paragraph::new(share_lines).wrap(ratatui::widgets::Wrap { trim: false }),
-        chunks[3],
-    );
-    f.render_widget(
-        Paragraph::new(footer).alignment(Alignment::Center),
-        chunks[4],
+        Paragraph::new(vec![
+            status_line,
+            Line::from(vec![
+                Span::styled("  Enter", theme::accent()),
+                Span::styled("  Submit share", theme::muted()),
+                Span::styled("     Esc", theme::accent()),
+                Span::styled("  Back to login", theme::muted()),
+            ])
+            .alignment(Alignment::Center),
+        ]),
+        footer_area,
     );
 }
 
-pub fn draw_recovery_reset(f: &mut Frame, app: &mut App) {
-    let area = centered_rect(70, 60, f.area());
-    let block = theme::field_block("Reset Master Password", true);
+// ── Post-recovery password reset ──────────────────────────────────────────────
 
-    let chunks = Layout::default()
+pub fn draw_recovery_reset(f: &mut Frame, app: &mut App) {
+    let area = centered_rect(64, 58, f.area());
+    let block = theme::modal("  Set New Master Password");
+
+    let [header_area, field0_area, field1_area, footer_area] = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(4),
@@ -131,44 +172,58 @@ pub fn draw_recovery_reset(f: &mut Frame, app: &mut App) {
             Constraint::Length(3),
             Constraint::Min(0),
         ])
-        .split(block.inner(area));
+        .areas(block.inner(area));
 
-    let header = Paragraph::new(vec![
-        Line::from("Recovery shares matched").style(theme::success_style()),
-        Line::from(""),
-        Line::from("Set a new master password"),
-    ])
-    .alignment(Alignment::Center);
+    f.render_widget(block, area);
 
-    app.settings_password_new.set_block(theme::field_block(
-        "New Master Password",
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  ✓  Recovery shares verified!",
+                theme::success(),
+            ))
+            .alignment(Alignment::Center),
+            Line::from(Span::styled(
+                "  Choose a new master password below.",
+                theme::muted(),
+            ))
+            .alignment(Alignment::Center),
+        ]),
+        header_area,
+    );
+
+    app.settings_password_new.set_block(theme::field(
+        "New master password",
         app.settings_active_field == 0,
     ));
-    app.settings_password_confirm.set_block(theme::field_block(
-        "Confirm New Password",
+    f.render_widget(&app.settings_password_new, field0_area);
+
+    app.settings_password_confirm.set_block(theme::field(
+        "Confirm new password",
         app.settings_active_field == 1,
     ));
+    f.render_widget(&app.settings_password_confirm, field1_area);
 
-    let mut footer = vec![Line::from("")];
+    let mut footer_lines = vec![Line::from("")];
     if let Some(ref err) = app.error_msg {
-        footer.push(Line::from(err.as_str()).style(theme::danger_style()));
-        footer.push(Line::from(""));
+        footer_lines.push(
+            Line::from(Span::styled(format!("  ✕  {}", err), theme::danger()))
+                .alignment(Alignment::Center),
+        );
+        footer_lines.push(Line::from(""));
     }
-    footer.push(
+    footer_lines.push(
         Line::from(vec![
-            Span::styled("Tab", theme::title_style()),
-            Span::raw(" - Next Field   "),
-            Span::styled("Ctrl+S", theme::title_style()),
-            Span::raw(" - Save and Open   "),
-            Span::styled("Esc", theme::title_style()),
-            Span::raw(" - Exit"),
+            Span::styled("  Tab", theme::accent()),
+            Span::styled("  Next field", theme::muted()),
+            Span::styled("     Ctrl+S", theme::accent()),
+            Span::styled("  Save & open journal", theme::muted()),
+            Span::styled("     Esc", theme::accent()),
+            Span::styled("  Exit", theme::muted()),
         ])
         .alignment(Alignment::Center),
     );
 
-    f.render_widget(block, area);
-    f.render_widget(header, chunks[0]);
-    f.render_widget(&app.settings_password_new, chunks[1]);
-    f.render_widget(&app.settings_password_confirm, chunks[2]);
-    f.render_widget(Paragraph::new(footer), chunks[3]);
+    f.render_widget(Paragraph::new(footer_lines), footer_area);
 }

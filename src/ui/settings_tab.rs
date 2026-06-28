@@ -1,3 +1,5 @@
+//! Settings tab — navigation list (left) and context-sensitive control panel (right).
+
 use super::theme;
 use crate::app::{App, SETTINGS_GROUPS};
 use ratatui::{
@@ -10,14 +12,11 @@ use ratatui::{
 pub fn draw(f: &mut Frame, app: &mut App, list_area: Rect, content_area: Rect) {
     draw_list(f, app, list_area);
 
+    f.render_widget(theme::field("", app.settings_panel_focused), content_area);
     let inner = content_area.inner(Margin {
         horizontal: 2,
         vertical: 1,
     });
-    f.render_widget(
-        theme::field_block("", app.settings_panel_focused),
-        content_area,
-    );
 
     match app.selected_index {
         0 => draw_password_panel(f, app, inner),
@@ -28,175 +27,190 @@ pub fn draw(f: &mut Frame, app: &mut App, list_area: Rect, content_area: Rect) {
     }
 }
 
+// ── Settings list ─────────────────────────────────────────────────────────────
+
 fn draw_list(f: &mut Frame, app: &App, area: Rect) {
     let items: Vec<ListItem> = SETTINGS_GROUPS
         .iter()
-        .map(|label| ListItem::new(Line::from(Span::raw(format!(" {}", label)))))
+        .map(|label| {
+            ListItem::new(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(*label, theme::text()),
+            ]))
+        })
         .collect();
-
-    let block = theme::panel_block("Settings");
-    let list = List::new(items)
-        .block(block)
-        .style(theme::text_style())
-        .highlight_style(theme::list_highlight_style());
 
     let mut state = ListState::default();
     state.select(Some(app.selected_index));
-    f.render_stateful_widget(list, area, &mut state);
+
+    f.render_stateful_widget(
+        List::new(items)
+            .block(theme::panel("Settings"))
+            .highlight_style(theme::list_highlight()),
+        area,
+        &mut state,
+    );
 }
 
+// ── Change password ───────────────────────────────────────────────────────────
+
 fn draw_password_panel(f: &mut Frame, app: &mut App, area: Rect) {
-    let chunks = Layout::default()
+    let [field0, field1, instructions_area] = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Min(0),
         ])
-        .split(area);
+        .areas(area);
 
-    let field_0_focused = app.settings_panel_focused && app.settings_active_field == 0;
-    let field_1_focused = app.settings_panel_focused && app.settings_active_field == 1;
+    let f0_focused = app.settings_panel_focused && app.settings_active_field == 0;
+    let f1_focused = app.settings_panel_focused && app.settings_active_field == 1;
 
     app.settings_password_new
-        .set_block(theme::field_block("New Master Password", field_0_focused));
-    f.render_widget(&app.settings_password_new, chunks[0]);
+        .set_block(theme::field("New master password", f0_focused));
+    f.render_widget(&app.settings_password_new, field0);
 
     app.settings_password_confirm
-        .set_block(theme::field_block("Confirm New Password", field_1_focused));
-    f.render_widget(&app.settings_password_confirm, chunks[1]);
+        .set_block(theme::field("Confirm new password", f1_focused));
+    f.render_widget(&app.settings_password_confirm, field1);
 
-    let instructions = if app.settings_panel_focused {
-        "Tab: Next Field | Ctrl+S: Save and Re-Encrypt | Esc: Back to List"
+    let instruction_text = if app.settings_panel_focused {
+        "Tab  Next field    Ctrl+S  Re-encrypt & save    Esc  Back"
     } else {
-        "Enter: Open"
+        "Press  Enter  to open"
     };
     f.render_widget(
-        Paragraph::new(vec![Line::from(""), Line::from(instructions)])
-            .alignment(Alignment::Center)
-            .style(theme::muted_style()),
-        chunks[2],
+        Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(instruction_text, theme::muted())).alignment(Alignment::Center),
+        ]),
+        instructions_area,
     );
 }
+
+// ── Inactivity timeout ────────────────────────────────────────────────────────
 
 fn draw_timeout_panel(f: &mut Frame, app: &App, area: Rect) {
     let mins = app.journal.settings.autolock_timeout_mins;
     let value = if mins == 0 {
         "Disabled".to_string()
     } else {
-        format!("{} minutes", mins)
+        format!("{} minute{}", mins, if mins == 1 { "" } else { "s" })
     };
 
-    let instructions = if app.settings_panel_focused {
-        "Left/Right or Up/Down: Adjust | Esc: Back to List"
+    let hint = if app.settings_panel_focused {
+        "←/→  Adjust    Esc  Back"
     } else {
-        "Enter: Open"
+        "Press  Enter  to open"
     };
 
-    let lines = vec![
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("Inactivity Timeout ", theme::muted_style()),
-            Span::styled(format!("< {} >", value), theme::text_style()),
-        ])
-        .alignment(Alignment::Center),
-        Line::from(""),
-        Line::from(instructions)
-            .alignment(Alignment::Center)
-            .style(theme::muted_style()),
-    ];
-    f.render_widget(Paragraph::new(lines), area);
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Auto-lock after ", theme::muted()),
+                Span::styled(format!(" ‹  {}  › ", value), theme::text()),
+            ])
+            .alignment(Alignment::Center),
+            Line::from(""),
+            Line::from(Span::styled(hint, theme::muted())).alignment(Alignment::Center),
+        ]),
+        area,
+    );
 }
+
+// ── Lock-on-suspend ───────────────────────────────────────────────────────────
 
 fn draw_lock_panel(f: &mut Frame, app: &App, area: Rect) {
-    let value = if app.journal.settings.lock_on_suspend {
-        "Enabled"
+    let (value, value_style) = if app.journal.settings.lock_on_suspend {
+        ("Enabled", theme::success())
     } else {
-        "Disabled"
+        ("Disabled", theme::muted())
     };
 
-    let instructions = if app.settings_panel_focused {
-        "Left/Right or Space: Toggle | Esc: Back to List"
+    let hint = if app.settings_panel_focused {
+        "Space/←/→  Toggle    Esc  Back"
     } else {
-        "Enter: Open"
+        "Press  Enter  to open"
     };
 
-    let lines = vec![
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("Lock on Workstation Lock ", theme::muted_style()),
-            Span::styled(format!("< {} >", value), theme::text_style()),
-        ])
-        .alignment(Alignment::Center),
-        Line::from(""),
-        Line::from(instructions)
-            .alignment(Alignment::Center)
-            .style(theme::muted_style()),
-    ];
-    f.render_widget(Paragraph::new(lines), area);
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Lock on workstation lock ", theme::muted()),
+                Span::styled(format!(" ‹  {}  › ", value), value_style),
+            ])
+            .alignment(Alignment::Center),
+            Line::from(""),
+            Line::from(Span::styled(hint, theme::muted())).alignment(Alignment::Center),
+        ]),
+        area,
+    );
 }
 
-fn draw_recovery_panel(f: &mut Frame, app: &App, area: Rect) {
-    let mut lines = vec![
-        Line::from(""),
-        Line::from("Split master password into N shares; any T can recover it")
-            .alignment(Alignment::Center)
-            .style(theme::muted_style()),
-        Line::from(""),
-    ];
+// ── Recovery shares (Shamir's Secret Sharing) ─────────────────────────────────
 
+fn draw_recovery_panel(f: &mut Frame, app: &App, area: Rect) {
     let n_focused = app.settings_panel_focused && app.settings_active_field == 0;
     let t_focused = app.settings_panel_focused && app.settings_active_field == 1;
 
-    lines.push(
-        Line::from(vec![
-            Span::styled("Total Shares (N) ", theme::muted_style()),
-            Span::styled(
-                format!(" < {} > ", app.settings_num_shares),
-                if n_focused {
-                    theme::title_style()
-                } else {
-                    theme::text_style()
-                },
-            ),
-        ])
-        .alignment(Alignment::Center),
-    );
-    lines.push(
-        Line::from(vec![
-            Span::styled("Required Threshold (T) ", theme::muted_style()),
-            Span::styled(
-                format!(" < {} > ", app.settings_threshold),
-                if t_focused {
-                    theme::title_style()
-                } else {
-                    theme::text_style()
-                },
-            ),
-        ])
-        .alignment(Alignment::Center),
-    );
-    lines.push(Line::from(""));
-
-    let instructions = if app.settings_panel_focused {
-        "Tab: Switch N/T | Left/Right: Adjust | Ctrl+S: Generate Shares | Esc: Back to List"
+    let n_style = if n_focused {
+        theme::accent()
     } else {
-        "Enter: Open"
+        theme::text()
     };
-    lines.push(
-        Line::from(instructions)
-            .alignment(Alignment::Center)
-            .style(theme::muted_style()),
-    );
+    let t_style = if t_focused {
+        theme::accent()
+    } else {
+        theme::text()
+    };
+
+    let hint = if app.settings_panel_focused {
+        "Tab  Switch N/T    ←/→  Adjust    Ctrl+S  Generate shares    Esc  Back"
+    } else {
+        "Press  Enter  to open"
+    };
+
+    let mut lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "Split your master password into N shares — any T can recover it.",
+            theme::muted(),
+        ))
+        .alignment(Alignment::Center),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Total shares  (N) ", theme::muted()),
+            Span::styled(format!(" ‹  {}  › ", app.settings_num_shares), n_style),
+        ])
+        .alignment(Alignment::Center),
+        Line::from(vec![
+            Span::styled("  Threshold     (T) ", theme::muted()),
+            Span::styled(format!(" ‹  {}  › ", app.settings_threshold), t_style),
+        ])
+        .alignment(Alignment::Center),
+        Line::from(""),
+        Line::from(Span::styled(hint, theme::muted())).alignment(Alignment::Center),
+    ];
 
     if !app.generated_shares.is_empty() {
         lines.push(Line::from(""));
-        lines.push(Line::from("Generated Shares").style(theme::success_style()));
+        lines.push(
+            Line::from(Span::styled(
+                "  Generated shares — store each one separately!",
+                theme::success(),
+            ))
+            .alignment(Alignment::Center),
+        );
         lines.push(Line::from(""));
         for (idx, share) in app.generated_shares.iter().enumerate() {
             lines.push(Line::from(vec![
-                Span::styled(format!("Share {} ", idx + 1), theme::title_style()),
-                Span::styled(share.clone(), theme::text_style()),
+                Span::styled(format!("  Share {:>2}  ", idx + 1), theme::label()),
+                Span::styled(share.clone(), theme::text()),
             ]));
         }
     }
