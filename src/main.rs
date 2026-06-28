@@ -120,8 +120,6 @@ where
             break;
         }
 
-        app.check_ollama_update();
-
         terminal.draw(|f| ui::draw(f, app))?;
 
         #[cfg(target_os = "windows")]

@@ -85,42 +85,4 @@ impl App {
         self.status_msg = Some("Recovery shares generated successfully!".to_string());
         Ok(())
     }
-
-    /// Toggles the Ollama summary flag, triggers a load if enabled, and persists the setting.
-    pub fn toggle_ollama_enabled(&mut self) {
-        self.journal.settings.ollama_enabled = !self.journal.settings.ollama_enabled;
-        if self.journal.settings.ollama_enabled && self.ollama_summary.is_none() {
-            self.trigger_ollama_summary();
-        }
-        self.persist_settings();
-    }
-
-    /// Cycles the selected Ollama model and persists the setting.
-    pub fn adjust_ollama_model(&mut self, delta: i32) {
-        if self.ollama_available_models.is_empty() {
-            return;
-        }
-        let len = self.ollama_available_models.len() as i32;
-        let next_idx = (self.ollama_model_index as i32 + delta).rem_euclid(len) as usize;
-        self.ollama_model_index = next_idx;
-        self.journal.settings.ollama_model = self.ollama_available_models[next_idx].clone();
-
-        // Clear cached summary to force reload on the new model
-        self.ollama_summary = None;
-        self.persist_settings();
-    }
-
-    /// Adjusts the weekly summary day range and persists the setting.
-    pub fn adjust_ollama_days(&mut self, delta: i32) {
-        let current = self.journal.settings.ollama_days as i32;
-        let next = (current + delta).clamp(1, 365) as u32; // Clamp between 1 and 365 days
-        self.journal.settings.ollama_days = next;
-
-        // Clear cached summary to force reload with the new range
-        self.ollama_summary = None;
-        if self.journal.settings.ollama_enabled {
-            self.trigger_ollama_summary();
-        }
-        self.persist_settings();
-    }
 }

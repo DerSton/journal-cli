@@ -25,11 +25,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_list(app: &mut App, key: KeyEvent) {
-    if app.active_tab == Tab::Dashboard {
-        handle_dashboard_list(app, key);
-        return;
-    }
-
     if app.active_tab == Tab::Settings && app.settings_panel_focused {
         handle_settings_panel(app, key);
         return;
@@ -39,19 +34,17 @@ fn handle_list(app: &mut App, key: KeyEvent) {
         KeyCode::Char('q') => app.should_quit = true,
         KeyCode::Tab => {
             let next = match app.active_tab {
-                Tab::Dashboard => Tab::Journal,
                 Tab::Journal => Tab::Contacts,
                 Tab::Contacts => Tab::Stats,
                 Tab::Stats => Tab::Settings,
-                Tab::Settings => Tab::Dashboard,
+                Tab::Settings => Tab::Journal,
             };
             app.switch_tab(next);
         }
-        KeyCode::Char('1') => app.switch_tab(Tab::Dashboard),
-        KeyCode::Char('2') => app.switch_tab(Tab::Journal),
-        KeyCode::Char('3') => app.switch_tab(Tab::Contacts),
-        KeyCode::Char('4') => app.switch_tab(Tab::Stats),
-        KeyCode::Char('5') => app.switch_tab(Tab::Settings),
+        KeyCode::Char('1') => app.switch_tab(Tab::Journal),
+        KeyCode::Char('2') => app.switch_tab(Tab::Contacts),
+        KeyCode::Char('3') => app.switch_tab(Tab::Stats),
+        KeyCode::Char('4') => app.switch_tab(Tab::Settings),
         KeyCode::Up | KeyCode::Char('k') => {
             if app.selected_index > 0 {
                 app.selected_index -= 1;
@@ -70,7 +63,6 @@ fn handle_list(app: &mut App, key: KeyEvent) {
             }
         }
         _ => match app.active_tab {
-            Tab::Dashboard => handle_dashboard_list(app, key),
             Tab::Journal => handle_journal_list(app, key),
             Tab::Contacts => handle_contacts_list(app, key),
             Tab::Settings => handle_settings_list(app, key),
@@ -177,35 +169,6 @@ fn handle_stats_list(app: &mut App, key: KeyEvent) {
     }
 }
 
-fn handle_dashboard_list(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Tab => {
-            app.switch_tab(Tab::Journal);
-        }
-        KeyCode::Char('1') => app.switch_tab(Tab::Dashboard),
-        KeyCode::Char('2') => app.switch_tab(Tab::Journal),
-        KeyCode::Char('3') => app.switch_tab(Tab::Contacts),
-        KeyCode::Char('4') => app.switch_tab(Tab::Stats),
-        KeyCode::Char('5') => app.switch_tab(Tab::Settings),
-        KeyCode::Char('q') => app.should_quit = true,
-        KeyCode::Char('r') | KeyCode::Char('R') => {
-            if app.journal.settings.ollama_enabled {
-                app.trigger_ollama_summary();
-            }
-        }
-        KeyCode::PageUp | KeyCode::Up | KeyCode::Char('k') => {
-            app.detail_scroll = app.detail_scroll.saturating_sub(1);
-        }
-        KeyCode::PageDown | KeyCode::Down | KeyCode::Char('j') => {
-            app.detail_scroll = app.detail_scroll.saturating_add(1);
-        }
-        KeyCode::Esc => {
-            app.should_quit = true;
-        }
-        _ => {}
-    }
-}
-
 fn handle_settings_panel(app: &mut App, key: KeyEvent) {
     if key.code == KeyCode::Esc {
         app.settings_panel_focused = false;
@@ -269,42 +232,6 @@ fn handle_settings_panel(app: &mut App, key: KeyEvent) {
             KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if let Err(e) = app.generate_recovery_shares() {
                     app.error_msg = Some(format!("Failed to generate shares: {}", e));
-                }
-            }
-            _ => {}
-        },
-        4 => match key.code {
-            KeyCode::Down | KeyCode::Tab => {
-                app.settings_active_field = (app.settings_active_field + 1) % 3;
-            }
-            KeyCode::Up | KeyCode::BackTab => {
-                app.settings_active_field = if app.settings_active_field == 0 {
-                    2
-                } else {
-                    app.settings_active_field - 1
-                };
-            }
-            KeyCode::Left
-            | KeyCode::Right
-            | KeyCode::Char('h')
-            | KeyCode::Char('l')
-            | KeyCode::Char(' ') => {
-                if app.settings_active_field == 0 {
-                    app.toggle_ollama_enabled();
-                } else if app.settings_active_field == 1 && key.code != KeyCode::Char(' ') {
-                    let delta = if key.code == KeyCode::Left || key.code == KeyCode::Char('h') {
-                        -1
-                    } else {
-                        1
-                    };
-                    app.adjust_ollama_model(delta);
-                } else if app.settings_active_field == 2 && key.code != KeyCode::Char(' ') {
-                    let delta = if key.code == KeyCode::Left || key.code == KeyCode::Char('h') {
-                        -1
-                    } else {
-                        1
-                    };
-                    app.adjust_ollama_days(delta);
                 }
             }
             _ => {}
@@ -377,7 +304,7 @@ fn handle_writing(app: &mut App, key: KeyEvent, is_edit: bool) {
             }
         }
         Tab::Contacts => handle_contact_form(app, key, is_edit),
-        Tab::Settings | Tab::Stats | Tab::Dashboard => {}
+        Tab::Settings | Tab::Stats => {}
     }
 }
 
@@ -547,7 +474,7 @@ fn handle_delete_confirm(app: &mut App, key: KeyEvent) {
         KeyCode::Char('y') | KeyCode::Char('Y') => match app.active_tab {
             Tab::Journal => app.delete_selected_entry(),
             Tab::Contacts => app.delete_selected_contact(),
-            Tab::Settings | Tab::Stats | Tab::Dashboard => {}
+            Tab::Settings | Tab::Stats => {}
         },
         KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => app.mode = AppMode::List,
         _ => {}

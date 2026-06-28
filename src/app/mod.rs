@@ -18,8 +18,6 @@ use ratatui_textarea::TextArea;
 /// Tabs available in the primary application navigation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
-    /// Dashboard view with simple stats and Ollama summary.
-    Dashboard,
     /// Journal entry view.
     Journal,
     /// Contacts directory view.
@@ -36,7 +34,6 @@ pub const SETTINGS_GROUPS: &[&str] = &[
     "Inactivity Timeout",
     "Lock on Suspend",
     "Recovery Shares",
-    "Ollama Summary",
 ];
 
 /// The application's current input and focus state.
@@ -135,22 +132,6 @@ pub struct App {
     pub should_quit: bool,
     /// Current search query string.
     pub search_query: String,
-
-    // --- Ollama Integration State ---
-    /// Cached Ollama summary text.
-    pub ollama_summary: Option<String>,
-    /// Error from the last Ollama fetch attempt.
-    pub ollama_error: Option<String>,
-    /// Whether an Ollama API call is currently running.
-    pub ollama_in_progress: bool,
-    /// Receiver for background thread summary updates.
-    pub ollama_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
-    /// Available Ollama models fetched from the local Ollama instance.
-    pub ollama_available_models: Vec<String>,
-    /// Selected index in available models list (for settings cycling).
-    pub ollama_model_index: usize,
-    /// Receiver for background thread model list updates.
-    pub ollama_models_rx: Option<std::sync::mpsc::Receiver<Vec<String>>>,
     /// Optional override date for the entry currently being written or edited.
     pub entry_date_for: Option<chrono::NaiveDate>,
 }
@@ -163,25 +144,12 @@ impl App {
         password: String,
         salt: [u8; SALT_SIZE],
     ) -> Self {
-        let (models_tx, models_rx) = std::sync::mpsc::channel();
-        let user_model = journal.settings.ollama_model.clone();
-        std::thread::spawn(move || {
-            let mut models = fetch_local_models();
-            // Ensure the user's configured model is in the list
-            if !models.contains(&user_model) {
-                models.insert(0, user_model);
-            }
-            let _ = models_tx.send(models);
-        });
-
-        let default_models = vec![journal.settings.ollama_model.clone()];
-
         let mut app = Self {
             journal,
             file_path,
             password,
             salt,
-            active_tab: Tab::Dashboard,
+            active_tab: Tab::Journal,
             selected_index: 0,
             mode: AppMode::List,
             textarea: TextArea::default(),
@@ -202,35 +170,11 @@ impl App {
             status_msg: Some("Welcome to your secure journal.".to_string()),
             should_quit: false,
             search_query: String::new(),
-
-            // Ollama State
-            ollama_summary: None,
-            ollama_error: None,
-            ollama_in_progress: false,
-            ollama_rx: None,
-            ollama_available_models: default_models,
-            ollama_model_index: 0,
-            ollama_models_rx: Some(models_rx),
             entry_date_for: None,
         };
 
         app.sort_entries();
         app.sort_contacts();
-
-        // Dedup available models and find model index
-        app.ollama_available_models.dedup();
-        if let Some(pos) = app
-            .ollama_available_models
-            .iter()
-            .position(|m| m == &app.journal.settings.ollama_model)
-        {
-            app.ollama_model_index = pos;
-        }
-
-        // Trigger summary generation on start if enabled
-        if app.journal.settings.ollama_enabled {
-            app.trigger_ollama_summary();
-        }
 
         app
     }
@@ -267,155 +211,16 @@ impl App {
         self.status_msg = None;
         self.error_msg = None;
         self.mode = AppMode::List;
-
-        // If switching to Dashboard, trigger Ollama summary if enabled and not already cached
-        if new_tab == Tab::Dashboard
-            && self.journal.settings.ollama_enabled
-            && self.ollama_summary.is_none()
-        {
-            self.trigger_ollama_summary();
-        }
     }
 
     /// Returns the length of the list in the currently active tab.
     pub fn list_len(&self) -> usize {
         match self.active_tab {
-            Tab::Dashboard => 0,
             Tab::Journal => self.filtered_entries().len(),
             Tab::Contacts => self.filtered_contacts().len(),
             Tab::Settings => SETTINGS_GROUPS.len(),
             Tab::Stats => 0,
         }
-    }
-
-    /// Checks if background tasks (Ollama updates, models) have finished and updates state.
-    pub fn check_ollama_update(&mut self) {
-        // Check for model list updates
-        if let Some(models) = self
-            .ollama_models_rx
-            .as_ref()
-            .and_then(|rx| rx.try_recv().ok())
-        {
-            self.ollama_available_models = models;
-            self.ollama_available_models.dedup();
-            if let Some(pos) = self
-                .ollama_available_models
-                .iter()
-                .position(|m| m == &self.journal.settings.ollama_model)
-            {
-                self.ollama_model_index = pos;
-            } else {
-                self.ollama_model_index = 0;
-            }
-            self.ollama_models_rx = None; // Only receive once
-        }
-
-        // Check for summary task updates
-        if let Some(res) = self.ollama_rx.as_ref().and_then(|rx| rx.try_recv().ok()) {
-            self.ollama_in_progress = false;
-            match res {
-                Ok(summary) => {
-                    self.ollama_summary = Some(summary);
-                    self.ollama_error = None;
-                }
-                Err(e) => {
-                    self.ollama_error = Some(e);
-                    self.ollama_summary = None;
-                }
-            }
-            self.ollama_rx = None;
-        }
-    }
-
-    /// Triggers summary generation using local Ollama model in a background thread.
-    pub fn trigger_ollama_summary(&mut self) {
-        if self.ollama_in_progress {
-            return;
-        }
-
-        // Gather relevant entries (strictly last N days only)
-        let now = chrono::Utc::now();
-        let days = self.journal.settings.ollama_days as i64;
-        let days_ago = now - chrono::Duration::days(days);
-        let entries_to_summarize: Vec<&crate::model::JournalEntry> = self
-            .journal
-            .entries
-            .iter()
-            .filter(|e| e.timestamp >= days_ago)
-            .collect();
-
-        if entries_to_summarize.is_empty() {
-            self.ollama_summary = Some(format!(
-                "No entries written in the last {} days to summarize.",
-                days
-            ));
-            self.ollama_error = None;
-            return;
-        }
-
-        self.ollama_in_progress = true;
-        self.ollama_error = None;
-
-        let model = self.journal.settings.ollama_model.clone();
-
-        // 1. Current UTC time context
-        let current_time_utc = now.format("%Y-%m-%d %H:%M:%S UTC").to_string();
-
-        // 2. Compile prompt with replaced contact placeholders
-        let mut prompt = String::new();
-        prompt.push_str("You are a personal journal summarizer.\n");
-        prompt.push_str(&format!("Current date and time: {}\n\n", current_time_utc));
-
-        prompt.push_str(&format!(
-            "Below are the journal entries written by the user over the last {} days, ordered chronologically from newest to oldest (newest first):\n\n",
-            days
-        ));
-        for entry in &entries_to_summarize {
-            let date_str = entry
-                .timestamp
-                .with_timezone(&chrono::Local)
-                .format("%Y-%m-%d %H:%M:%S")
-                .to_string();
-
-            // Replace contact placeholders with actual names in the content
-            let mut processed_content = entry.content.clone();
-            let mut search_str = entry.content.clone();
-            while let Some(start_idx) = search_str.find("{{person|") {
-                let after_tag = &search_str[start_idx + 9..];
-                if let Some(end_idx) = after_tag.find("}}") {
-                    let id = &after_tag[..end_idx];
-                    let placeholder = format!("{{{{person|{}}}}}", id);
-                    let replacement =
-                        if let Some(contact) = self.journal.contacts.iter().find(|c| c.id == id) {
-                            contact.full_name()
-                        } else {
-                            "Unknown Person".to_string()
-                        };
-                    processed_content = processed_content.replace(&placeholder, &replacement);
-                    search_str = after_tag[end_idx + 2..].to_string();
-                } else {
-                    break;
-                }
-            }
-
-            prompt.push_str(&format!(
-                "Date: {}\nContent:\n{}\n---\n",
-                date_str, processed_content
-            ));
-        }
-
-        prompt.push_str("\nWrite a brief, continuous summary (Fließtext, do NOT use bullet points, do NOT use lists) in the same language as the entries (e.g. German if entries are in German).\n");
-        prompt.push_str("Write the summary in the third-person perspective (e.g. 'Der Nutzer hat...', 'Gestern hat er...'), NEVER use the first-person ('Ich-Perspektive').\n");
-        prompt.push_str("Do NOT write a day-by-day chronological list or sequence. Instead, write a single continuous paragraph (ein einzelner zusammenhängender Absatz) that summarizes the entire time period as a whole.\n");
-        prompt.push_str("Summary:\n");
-
-        let (tx, rx) = std::sync::mpsc::channel();
-        self.ollama_rx = Some(rx);
-
-        std::thread::spawn(move || {
-            let res = generate_summary(&model, &prompt);
-            let _ = tx.send(res);
-        });
     }
 
     /// Returns a list of references to journal entries, filtered by the current search query.
@@ -487,48 +292,6 @@ impl App {
         self.journal
             .save(&self.file_path, &self.password, &self.salt)
     }
-}
-
-fn fetch_local_models() -> Vec<String> {
-    let get_models = || -> Option<Vec<String>> {
-        let resp = ureq::get("http://localhost:11434/api/tags").call().ok()?;
-        let val = resp.into_json::<serde_json::Value>().ok()?;
-        let arr = val["models"].as_array()?;
-        let models: Vec<String> = arr
-            .iter()
-            .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-            .collect();
-        Some(models)
-    };
-    get_models().unwrap_or_default()
-}
-
-fn generate_summary(model: &str, prompt: &str) -> Result<String, String> {
-    let resp_val: serde_json::Value = ureq::post("http://localhost:11434/api/generate")
-        .send_json(serde_json::json!({
-            "model": model,
-            "prompt": prompt,
-            "stream": false
-        }))
-        .map_err(|e| format!("Failed to connect to Ollama: {}", e))?
-        .into_json::<serde_json::Value>()
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-    if let Some(error) = resp_val["error"].as_str() {
-        return Err(error.to_string());
-    }
-
-    let summary = resp_val["response"]
-        .as_str()
-        .ok_or_else(|| "No response text found in Ollama output".to_string())?
-        .trim()
-        .to_string();
-
-    if summary.is_empty() {
-        return Err("Ollama returned an empty summary".to_string());
-    }
-
-    Ok(summary)
 }
 
 #[cfg(test)]
