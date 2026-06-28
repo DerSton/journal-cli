@@ -11,7 +11,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Paragraph, Tabs},
 };
 
 /// Main UI entry point: dispatches to a full-screen mode or the tabbed main view.
@@ -72,29 +72,28 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 }
 
 fn draw_tab_bar(f: &mut Frame, app: &App, area: Rect) {
-    let tab_span = |label: &str, tab: Tab| {
-        Span::styled(
-            format!(" {} ", label),
-            if app.active_tab == tab {
-                theme::title_style()
-            } else {
-                theme::muted_style()
-            },
-        )
+    let titles = vec![
+        Line::from("Journal [1]"),
+        Line::from("Contacts [2]"),
+        Line::from("Stats [3]"),
+        Line::from("Settings [4]"),
+    ];
+
+    let selected_index = match app.active_tab {
+        Tab::Journal => 0,
+        Tab::Contacts => 1,
+        Tab::Stats => 2,
+        Tab::Settings => 3,
     };
 
-    let line = Line::from(vec![
-        Span::raw(" Journal CLI  "),
-        tab_span("Journal [1]", Tab::Journal),
-        Span::styled(" | ", theme::muted_style()),
-        tab_span("Contacts [2]", Tab::Contacts),
-        Span::styled(" | ", theme::muted_style()),
-        tab_span("Stats [3]", Tab::Stats),
-        Span::styled(" | ", theme::muted_style()),
-        tab_span("Settings [4]", Tab::Settings),
-    ]);
+    let tabs = Tabs::new(titles)
+        .block(theme::panel_block(""))
+        .select(selected_index)
+        .style(theme::muted_style())
+        .highlight_style(theme::title_style())
+        .divider(Span::styled(" | ", theme::muted_style()));
 
-    f.render_widget(Paragraph::new(line).block(theme::panel_block("")), area);
+    f.render_widget(tabs, area);
 }
 
 fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {

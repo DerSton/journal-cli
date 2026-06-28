@@ -48,20 +48,28 @@ pub fn list_highlight_style() -> Style {
 /// A rounded, bordered panel with a plain (non-focusable) title, used for lists and
 /// read-only preview panes.
 pub fn panel_block(title: impl Into<String>) -> Block<'static> {
-    Block::default()
+    let t = title.into();
+    let mut block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(MUTED))
-        .title(format!(" {} ", title.into()))
+        .border_style(Style::default().fg(MUTED));
+    if !t.trim().is_empty() {
+        block = block.title(format!(" {} ", t));
+    }
+    block
 }
 
 /// A rounded, bordered field whose border lights up with the accent color when focused.
 /// Used everywhere a single input/control is rendered (contact form fields, settings
 /// controls, password inputs).
 pub fn field_block(title: impl Into<String>, focused: bool) -> Block<'static> {
-    Block::default()
+    let t = title.into();
+    let mut block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(border_style(focused))
-        .title(format!(" {} ", title.into()))
+        .border_style(border_style(focused));
+    if !t.trim().is_empty() {
+        block = block.title(format!(" {} ", t));
+    }
+    block
 }
