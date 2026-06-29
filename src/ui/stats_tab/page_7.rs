@@ -56,10 +56,13 @@ fn draw_length_distribution(f: &mut Frame, app: &App, area: Rect) {
     let bar_data: Vec<(&str, u64)> = temp_data.iter().map(|(l, c)| (l.as_str(), *c)).collect();
 
     let block = theme::panel("Entry Length Distribution (Word Count Buckets)");
+    let bar_width =
+        (((area.width.saturating_sub(6) as usize) / 5).saturating_sub(2)).clamp(2, 8) as u16;
+
     let chart = BarChart::default()
         .block(block)
         .data(&bar_data)
-        .bar_width(8)
+        .bar_width(bar_width)
         .bar_gap(2)
         .value_style(theme::text())
         .label_style(theme::muted())
@@ -106,10 +109,13 @@ fn draw_monthly_avg_length(f: &mut Frame, app: &App, area: Rect) {
     let bar_data: Vec<(&str, u64)> = temp_data.iter().map(|(l, c)| (l.as_str(), *c)).collect();
 
     let block = theme::panel("Average Entry Length per Month");
+    let bar_width =
+        (((area.width.saturating_sub(4) as usize) / 12).saturating_sub(1)).clamp(1, 4) as u16;
+
     let chart = BarChart::default()
         .block(block)
         .data(&bar_data)
-        .bar_width(4)
+        .bar_width(bar_width)
         .bar_gap(1)
         .value_style(theme::text())
         .label_style(theme::muted())

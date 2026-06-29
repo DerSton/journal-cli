@@ -57,10 +57,13 @@ fn draw_word_trend(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
+    let bar_width =
+        (((area.width.saturating_sub(4) as usize) / limit).saturating_sub(1)).clamp(1, 4) as u16;
+
     let chart = BarChart::default()
         .block(block)
         .data(&bar_data)
-        .bar_width(4)
+        .bar_width(bar_width)
         .bar_gap(1)
         .value_style(theme::text())
         .label_style(theme::muted())
@@ -102,10 +105,13 @@ fn draw_monthly_activity(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
+    let bar_width =
+        (((area.width.saturating_sub(4) as usize) / 12).saturating_sub(1)).clamp(1, 4) as u16;
+
     let chart = BarChart::default()
         .block(block)
         .data(&bar_data)
-        .bar_width(4)
+        .bar_width(bar_width)
         .bar_gap(1)
         .value_style(theme::text())
         .label_style(theme::muted())

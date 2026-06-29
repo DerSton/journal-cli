@@ -1,7 +1,7 @@
 //! Page 5: Word Analysis & Language statistics screen.
 
 use crate::app::App;
-use crate::ui::stats_tab::helpers::{kpi_row, word_frequencies};
+use crate::ui::stats_tab::helpers::{clean_content, kpi_row, word_frequencies};
 use crate::ui::theme;
 use ratatui::{
     Frame,
@@ -110,10 +110,8 @@ fn draw_vocabulary_richness(f: &mut Frame, app: &App, area: Rect) {
     let mut word_counts = std::collections::HashMap::new();
 
     for entry in entries {
-        for word in entry
-            .content
-            .split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '-')
-        {
+        let cleaned = clean_content(&entry.content);
+        for word in cleaned.split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '-') {
             let w = word.to_lowercase();
             if !w.is_empty() {
                 total_words += 1;

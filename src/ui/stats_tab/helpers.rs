@@ -98,15 +98,48 @@ pub fn month_abbrev(month: u32) -> &'static str {
     }
 }
 
+/// Strips contact mention tags `{{person|...}}` from text to clean it for analysis.
+pub fn clean_content(content: &str) -> String {
+    let mut result = String::new();
+    let mut remaining = content;
+    while let Some(start_idx) = remaining.find("{{person|") {
+        result.push_str(&remaining[..start_idx]);
+        let rest = &remaining[start_idx..];
+        if let Some(end_idx) = rest.find("}}") {
+            remaining = &rest[end_idx + 2..];
+        } else {
+            remaining = &rest[9..];
+        }
+    }
+    result.push_str(remaining);
+    result
+}
+/// Truncates a string to max_len (with ellipsis if truncated) and pads it to exactly max_len.
+pub fn truncate_pad(s: &str, max_len: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count > max_len {
+        let mut truncated: String = s.chars().take(max_len.saturating_sub(1)).collect();
+        if max_len > 0 {
+            truncated.push('…');
+        }
+        truncated
+    } else {
+        let padding = max_len.saturating_sub(char_count);
+        let mut padded = s.to_string();
+        for _ in 0..padding {
+            padded.push(' ');
+        }
+        padded
+    }
+}
+
 /// Performs frequency analysis on all words in the journal entries, filtering out stop words.
 pub fn word_frequencies(entries: &[JournalEntry]) -> Vec<(String, usize)> {
     let stop: std::collections::HashSet<&str> = STOP_WORDS.iter().copied().collect();
     let mut freq: HashMap<String, usize> = HashMap::new();
     for entry in entries {
-        for word in entry
-            .content
-            .split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '-')
-        {
+        let cleaned = clean_content(&entry.content);
+        for word in cleaned.split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '-') {
             let w = word.to_lowercase();
             if w.len() > 2 && !stop.contains(w.as_str()) {
                 *freq.entry(w).or_insert(0) += 1;

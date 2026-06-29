@@ -40,18 +40,18 @@ fn draw_yoy_table(f: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::from(vec![
         Span::styled("  Year ", theme::label()),
         Span::styled("  Entries ", theme::label()),
-        Span::styled("   Words   ", theme::label()),
-        Span::styled("  Avg Words  ", theme::label()),
+        Span::styled("   Words     ", theme::label()),
+        Span::styled("  Avg Words   ", theme::label()),
         Span::styled("  Active Days  ", theme::label()),
-        Span::styled("  Best Streak  ", theme::label()),
+        Span::styled("  Best Streak     ", theme::label()),
     ]));
     lines.push(Line::from(vec![
         Span::styled("  ─────", theme::dim()),
         Span::styled("  ────────", theme::dim()),
-        Span::styled("   ─────────", theme::dim()),
-        Span::styled("  ───────────", theme::dim()),
-        Span::styled("  ───────────", theme::dim()),
-        Span::styled("  ───────────", theme::dim()),
+        Span::styled("   ──────────", theme::dim()),
+        Span::styled("  ────────────", theme::dim()),
+        Span::styled("  ─────────────", theme::dim()),
+        Span::styled("  ───────────────", theme::dim()),
     ]));
 
     for y in years {
@@ -82,7 +82,7 @@ fn draw_yoy_table(f: &mut Frame, app: &App, area: Rect) {
             Span::styled(format!("  {:>7} ", total_entries), theme::text()),
             Span::styled(format!("   {:>9} ", total_words), theme::text()),
             Span::styled(format!("  {:>11} ", avg_words), theme::text()),
-            Span::styled(format!("  {:>11} ", active_days), theme::text()),
+            Span::styled(format!("  {:>11}  ", active_days), theme::text()),
             Span::styled(format!("  {:>11} days", best_streak), theme::streak()),
         ]));
     }

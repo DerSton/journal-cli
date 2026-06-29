@@ -1,7 +1,7 @@
 //! Page 8: People Directory Stats statistics screen.
 
 use crate::app::App;
-use crate::ui::stats_tab::helpers::kpi_row;
+use crate::ui::stats_tab::helpers::{kpi_row, truncate_pad};
 use crate::ui::theme;
 use chrono::{Datelike, Local, NaiveDate};
 use ratatui::{
@@ -136,10 +136,13 @@ fn draw_age_distribution(f: &mut Frame, app: &App, area: Rect) {
     let bar_data: Vec<(&str, u64)> = temp_data.iter().map(|(l, c)| (l.as_str(), *c)).collect();
 
     let block = theme::panel("Age Distribution (Alive)");
+    let bar_width =
+        (((area.width.saturating_sub(6) as usize) / 5).saturating_sub(2)).clamp(2, 6) as u16;
+
     let chart = BarChart::default()
         .block(block)
         .data(&bar_data)
-        .bar_width(6)
+        .bar_width(bar_width)
         .bar_gap(2)
         .value_style(theme::text())
         .label_style(theme::muted())
@@ -191,7 +194,10 @@ fn draw_upcoming_birthdays(f: &mut Frame, app: &App, area: Rect) {
         let label = if *days == 0 { " 🎂 TODAY!" } else { "" };
 
         lines.push(Line::from(vec![
-            Span::styled(format!("  {:<15} ", contact.display_name()), theme::text()),
+            Span::styled(
+                format!("  {} ", truncate_pad(&contact.display_name(), 15)),
+                theme::text(),
+            ),
             Span::styled(
                 format!("{} (turns {})", bday.format("%b %d"), age),
                 theme::muted(),

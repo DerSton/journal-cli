@@ -1,7 +1,7 @@
 //! Page 9: Sentiment & Content Patterns statistics screen.
 
 use crate::app::App;
-use crate::ui::stats_tab::helpers::{STOP_WORDS, kpi_row};
+use crate::ui::stats_tab::helpers::{STOP_WORDS, clean_content, kpi_row};
 use crate::ui::theme;
 use chrono::Local;
 use ratatui::{
@@ -153,8 +153,8 @@ fn draw_bigram_analysis(f: &mut Frame, app: &App, area: Rect) {
     let mut bigrams = HashMap::new();
 
     for entry in entries {
-        let tokens: Vec<String> = entry
-            .content
+        let cleaned = clean_content(&entry.content);
+        let tokens: Vec<String> = cleaned
             .split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '-')
             .map(|t| t.to_lowercase())
             .filter(|t| t.len() > 2 && !stop.contains(t.as_str()))

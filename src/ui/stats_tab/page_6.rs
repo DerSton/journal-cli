@@ -1,7 +1,7 @@
 //! Page 6: Contact Insights statistics screen.
 
 use crate::app::App;
-use crate::ui::stats_tab::helpers::calculate_top_contacts;
+use crate::ui::stats_tab::helpers::{calculate_top_contacts, truncate_pad};
 use crate::ui::theme;
 use chrono::{Datelike, Local};
 use ratatui::{
@@ -60,7 +60,7 @@ fn draw_most_mentioned(f: &mut Frame, app: &App, area: Rect) {
 
         lines.push(Line::from(vec![
             Span::styled(medal, theme::label()),
-            Span::styled(format!("{:<15}", contact.display_name()), theme::text()),
+            Span::styled(truncate_pad(&contact.display_name(), 15), theme::text()),
             Span::styled(bar, style),
             Span::styled(format!(" ({})", count), theme::muted()),
         ]));
@@ -96,7 +96,7 @@ fn draw_mention_trends(f: &mut Frame, app: &App, area: Rect) {
     for (contact, _) in top_contacts.iter().take(5) {
         let tag = contact.mention_tag();
         let mut row_spans = vec![Span::styled(
-            format!("  {:<16}", contact.display_name()),
+            format!("  {}", truncate_pad(&contact.display_name(), 16)),
             theme::text(),
         )];
 
@@ -122,7 +122,7 @@ fn draw_mention_trends(f: &mut Frame, app: &App, area: Rect) {
                 _ => ("█", theme::accent()),
             };
 
-            row_spans.push(Span::styled(format!(" {} ", cell_char), style));
+            row_spans.push(Span::styled(format!("  {}  ", cell_char), style));
         }
         lines.push(Line::from(row_spans));
     }
@@ -147,28 +147,34 @@ fn draw_cooccurrence_matrix(f: &mut Frame, app: &App, area: Rect) {
 
     let mut lines = vec![Line::from("")];
 
-    let mut header_spans = vec![Span::styled("  Colleagues   ", theme::dim())];
+    let mut header_spans = vec![Span::styled("  Colleagues  ", theme::dim())];
     for &c in &selected_contacts {
-        let name_short = if c.nickname.is_empty() {
-            c.last_name.chars().take(4).collect::<String>()
+        let name_raw = if c.nickname.is_empty() {
+            &c.last_name
         } else {
-            c.nickname.chars().take(4).collect::<String>()
+            &c.nickname
         };
-        header_spans.push(Span::styled(format!(" {:^4}", name_short), theme::muted()));
+        header_spans.push(Span::styled(
+            format!(" {:^4} ", truncate_pad(name_raw, 4)),
+            theme::muted(),
+        ));
     }
     lines.push(Line::from(header_spans));
 
     for (i, &c_i) in selected_contacts.iter().enumerate() {
-        let name_short = if c_i.nickname.is_empty() {
-            c_i.last_name.chars().take(12).collect::<String>()
+        let name_raw = if c_i.nickname.is_empty() {
+            &c_i.last_name
         } else {
-            c_i.nickname.chars().take(12).collect::<String>()
+            &c_i.nickname
         };
-        let mut row_spans = vec![Span::styled(format!("  {:<12}", name_short), theme::text())];
+        let mut row_spans = vec![Span::styled(
+            format!("  {}", truncate_pad(name_raw, 12)),
+            theme::text(),
+        )];
 
         for (j, &c_j) in selected_contacts.iter().enumerate() {
             if i == j {
-                row_spans.push(Span::styled("   -  ", theme::dim()));
+                row_spans.push(Span::styled("  -   ", theme::dim()));
             } else {
                 let tag_i = c_i.mention_tag();
                 let tag_j = c_j.mention_tag();
@@ -180,9 +186,9 @@ fn draw_cooccurrence_matrix(f: &mut Frame, app: &App, area: Rect) {
                     .count();
 
                 if count > 0 {
-                    row_spans.push(Span::styled(format!(" {:^4}", count), theme::accent()));
+                    row_spans.push(Span::styled(format!("  {:^2}  ", count), theme::accent()));
                 } else {
-                    row_spans.push(Span::styled("   0  ", theme::muted()));
+                    row_spans.push(Span::styled("  0   ", theme::muted()));
                 }
             }
         }
@@ -212,13 +218,13 @@ fn draw_activity_timeline(f: &mut Frame, app: &App, area: Rect) {
 
     for contact in top_contacts.iter().take(5).map(|x| x.0) {
         let tag = contact.mention_tag();
-        let name_short = if contact.nickname.is_empty() {
-            contact.last_name.chars().take(10).collect::<String>()
+        let name_raw = if contact.nickname.is_empty() {
+            &contact.last_name
         } else {
-            contact.nickname.chars().take(10).collect::<String>()
+            &contact.nickname
         };
         let mut row_spans = vec![Span::styled(
-            format!("  {:<10}: ", name_short),
+            format!("  {}: ", truncate_pad(name_raw, 10)),
             theme::text(),
         )];
 

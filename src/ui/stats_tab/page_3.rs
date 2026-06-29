@@ -41,10 +41,13 @@ fn draw_hourly_chart(f: &mut Frame, app: &App, area: Rect) {
     let bar_data: Vec<(&str, u64)> = temp_data.iter().map(|(l, c)| (l.as_str(), *c)).collect();
 
     let block = theme::panel("Hourly Activity (0:00 - 23:00)");
+    let bar_width =
+        (((area.width.saturating_sub(4) as usize) / 24).saturating_sub(1)).clamp(1, 3) as u16;
+
     let chart = BarChart::default()
         .block(block)
         .data(&bar_data)
-        .bar_width(1)
+        .bar_width(bar_width)
         .bar_gap(1)
         .value_style(theme::text())
         .label_style(theme::muted())

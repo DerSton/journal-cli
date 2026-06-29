@@ -111,7 +111,9 @@ fn draw_hero_kpis(f: &mut Frame, app: &App, area: Rect) {
 
 fn draw_heatmap(f: &mut Frame, app: &App, area: Rect) {
     let today = Local::now().date_naive();
-    let start_date = today - chrono::Duration::days(364);
+    let raw_start = today - chrono::Duration::days(364);
+    let start_weekday = raw_start.weekday().num_days_from_monday() as i64;
+    let start_date = raw_start - chrono::Duration::days(start_weekday);
 
     let mut entry_counts = HashMap::new();
     for entry in &app.journal.entries {
@@ -122,7 +124,7 @@ fn draw_heatmap(f: &mut Frame, app: &App, area: Rect) {
     let mut lines = Vec::new();
     lines.push(Line::from(""));
 
-    let mut month_labels = vec![Span::styled("      ", theme::dim())];
+    let mut header_chars = vec![' '; 52];
     let mut current_month = 0;
     for day_idx in 0..52 {
         let col_date = start_date + chrono::Duration::days(day_idx * 7);
@@ -130,9 +132,30 @@ fn draw_heatmap(f: &mut Frame, app: &App, area: Rect) {
         if m != current_month && col_date.day() <= 7 {
             current_month = m;
             let month_str = crate::ui::stats_tab::helpers::month_abbrev(m);
-            month_labels.push(Span::styled(format!("{:<4}", month_str), theme::muted()));
-        } else if month_labels.len() < (day_idx + 1) as usize {
+            let chars: Vec<char> = month_str.chars().collect();
+            for (offset, &ch) in chars.iter().enumerate() {
+                let idx = day_idx as usize + offset;
+                if idx < 52 {
+                    header_chars[idx] = ch;
+                }
+            }
+        }
+    }
+
+    let mut month_labels = vec![Span::styled("      ", theme::dim())];
+    let mut i = 0;
+    while i < 52 {
+        let ch = header_chars[i];
+        if ch == ' ' {
             month_labels.push(Span::styled(" ", theme::dim()));
+            i += 1;
+        } else {
+            let mut word = String::new();
+            while i < 52 && header_chars[i] != ' ' {
+                word.push(header_chars[i]);
+                i += 1;
+            }
+            month_labels.push(Span::styled(word, theme::muted()));
         }
     }
     lines.push(Line::from(month_labels));
