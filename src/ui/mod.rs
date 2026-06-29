@@ -174,7 +174,10 @@ fn build_hint_spans(app: &App) -> Vec<Span<'static>> {
                         v.extend(hint_pair("↑↓", "Navigate"));
                         v.extend(hint_pair("Enter", "Open"));
                     }
-                    Tab::Stats => {}
+                    Tab::Stats => {
+                        v.extend(hint_pair("←/→", "Page"));
+                        v.extend(hint_pair("PgUp/Dn", "Scroll"));
+                    }
                 }
                 v.extend(hint_pair("q", "Quit"));
             }

@@ -15,6 +15,9 @@ use crate::crypto::SALT_SIZE;
 use crate::model::Journal;
 use ratatui_textarea::TextArea;
 
+/// Total number of statistics sub-pages.
+pub const STATS_PAGE_COUNT: usize = 10;
+
 /// Tabs available in the primary application navigation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -134,6 +137,10 @@ pub struct App {
     pub search_query: String,
     /// Optional override date for the entry currently being written or edited.
     pub entry_date_for: Option<chrono::NaiveDate>,
+    /// Currently displayed statistics sub-page (0-indexed).
+    pub stats_page: usize,
+    /// Vertical scroll offset for the active stats page.
+    pub stats_scroll: u16,
 }
 
 impl App {
@@ -171,6 +178,8 @@ impl App {
             should_quit: false,
             search_query: String::new(),
             entry_date_for: None,
+            stats_page: 0,
+            stats_scroll: 0,
         };
 
         app.sort_entries();

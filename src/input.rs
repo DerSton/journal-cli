@@ -155,8 +155,27 @@ fn handle_settings_list(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_stats_list(app: &mut App, key: KeyEvent) {
-    if key.code == KeyCode::Esc {
-        app.should_quit = true;
+    match key.code {
+        KeyCode::Esc => app.should_quit = true,
+        KeyCode::Right | KeyCode::Char('l') => {
+            if app.stats_page + 1 < crate::app::STATS_PAGE_COUNT {
+                app.stats_page += 1;
+                app.stats_scroll = 0;
+            }
+        }
+        KeyCode::Left | KeyCode::Char('h') => {
+            if app.stats_page > 0 {
+                app.stats_page -= 1;
+                app.stats_scroll = 0;
+            }
+        }
+        KeyCode::PageDown => {
+            app.stats_scroll = app.stats_scroll.saturating_add(5);
+        }
+        KeyCode::PageUp => {
+            app.stats_scroll = app.stats_scroll.saturating_sub(5);
+        }
+        _ => {}
     }
 }
 
