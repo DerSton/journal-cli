@@ -3,6 +3,22 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// A file attachment embedded in a journal entry.
+///
+/// The file content is stored as a Base64-encoded string to remain
+/// compatible with JSON serialization.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Attachment {
+    /// Original file name (e.g. "photo.jpg").
+    pub filename: String,
+    /// MIME type of the file (e.g. "image/jpeg").
+    pub mime_type: String,
+    /// File size in bytes (before Base64 encoding).
+    pub size_bytes: u64,
+    /// Base64-encoded file content.
+    pub data: String,
+}
+
 /// A single encrypted journal entry.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JournalEntry {
@@ -15,6 +31,9 @@ pub struct JournalEntry {
     /// Optional date this entry applies to (for back-dating).
     #[serde(default)]
     pub date_for: Option<chrono::NaiveDate>,
+    /// File attachments embedded in this entry.
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
 }
 
 impl JournalEntry {

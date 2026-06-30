@@ -51,11 +51,18 @@ fn draw_list(f: &mut Frame, app: &App, area: Rect) {
                 theme::muted()
             };
 
-            ListItem::new(vec![
+            let mut item_lines = vec![
                 Line::from(Span::styled(format!(" {}", date_str), date_style)),
                 Line::from(Span::styled(format!("  {}", snippet), snippet_style)),
-                Line::from(""),
-            ])
+            ];
+            if !entry.attachments.is_empty() {
+                item_lines.push(Line::from(Span::styled(
+                    format!("  📎 {}", entry.attachments.len()),
+                    theme::muted(),
+                )));
+            }
+            item_lines.push(Line::from(""));
+            ListItem::new(item_lines)
         })
         .collect();
 
@@ -160,6 +167,39 @@ fn draw_preview(f: &mut Frame, app: &mut App, area: Rect) {
 
     for line in entry.content.lines() {
         lines.push(render_mentions(line, &app.journal.contacts));
+    }
+
+    if !entry.attachments.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!("  {}", "─".repeat((area.width as usize).saturating_sub(4))),
+            theme::dim(),
+        )));
+        lines.push(Line::from(Span::styled(
+            format!(
+                "  📎 {} attachment{}",
+                entry.attachments.len(),
+                if entry.attachments.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                }
+            ),
+            theme::label(),
+        )));
+        for att in &entry.attachments {
+            let size_str = if att.size_bytes >= 1024 * 1024 {
+                format!("{:.1} MiB", att.size_bytes as f64 / (1024.0 * 1024.0))
+            } else if att.size_bytes >= 1024 {
+                format!("{:.1} KiB", att.size_bytes as f64 / 1024.0)
+            } else {
+                format!("{} B", att.size_bytes)
+            };
+            lines.push(Line::from(vec![
+                Span::styled(format!("    {} ", att.filename), theme::text()),
+                Span::styled(format!("({})", size_str), theme::muted()),
+            ]));
+        }
     }
 
     let total_lines = lines.len();

@@ -100,6 +100,20 @@ fn handle_journal_list(app: &mut App, key: KeyEvent) {
                 app.error_msg = None;
             }
         }
+        KeyCode::Char('a') => {
+            if !app.journal.entries.is_empty() {
+                app.status_msg = None;
+                app.error_msg = None;
+                app.attach_files();
+            }
+        }
+        KeyCode::Char('x') => {
+            if !app.filtered_entries().is_empty() {
+                app.status_msg = None;
+                app.error_msg = None;
+                app.export_entry_as_md();
+            }
+        }
         KeyCode::Esc => {
             app.should_quit = true;
         }
