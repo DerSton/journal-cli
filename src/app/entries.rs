@@ -283,3 +283,46 @@ fn mime_from_extension(path: &std::path::Path) -> String {
         _ => "application/octet-stream".to_string(),
     }
 }
+
+#[cfg(test)]
+mod entries_tests {
+    use super::*;
+    use crate::model::Attachment;
+    use std::path::Path;
+
+    #[test]
+    fn test_mime_inference() {
+        assert_eq!(mime_from_extension(Path::new("photo.jpg")), "image/jpeg");
+        assert_eq!(
+            mime_from_extension(Path::new("document.pdf")),
+            "application/pdf"
+        );
+        assert_eq!(
+            mime_from_extension(Path::new("archive.zip")),
+            "application/zip"
+        );
+        assert_eq!(
+            mime_from_extension(Path::new("unknown.xyz")),
+            "application/octet-stream"
+        );
+        assert_eq!(mime_from_extension(Path::new("notes.md")), "text/markdown");
+    }
+
+    #[test]
+    fn test_attachment_struct_serialization() {
+        let attachment = Attachment {
+            filename: "test.txt".to_string(),
+            mime_type: "text/plain".to_string(),
+            size_bytes: 12,
+            data: "SGVsbG8gV29ybGQ=".to_string(), // "Hello World" in base64
+        };
+
+        let serialized = serde_json::to_string(&attachment).unwrap();
+        let deserialized: Attachment = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.filename, "test.txt");
+        assert_eq!(deserialized.mime_type, "text/plain");
+        assert_eq!(deserialized.size_bytes, 12);
+        assert_eq!(deserialized.data, "SGVsbG8gV29ybGQ=");
+    }
+}
