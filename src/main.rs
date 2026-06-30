@@ -120,6 +120,11 @@ where
             break;
         }
 
+        if app.redraw_requested {
+            terminal.clear()?;
+            app.redraw_requested = false;
+        }
+
         terminal.draw(|f| ui::draw(f, app))?;
 
         #[cfg(target_os = "windows")]

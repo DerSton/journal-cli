@@ -4,6 +4,22 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Routes a single key press to the right handler based on the app's current mode.
 pub fn handle_key(app: &mut App, key: KeyEvent) {
+    // Clean up AltGr key events on Windows/Linux where AltGr (Ctrl + Alt)
+    // is used to input non-ASCII or special characters (like €, @, [, ], {, }, etc.).
+    let mut key = key;
+    if key
+        .modifiers
+        .contains(KeyModifiers::CONTROL | KeyModifiers::ALT)
+    {
+        match key.code {
+            KeyCode::Char(c) if !c.is_ascii_alphabetic() => {
+                key.modifiers.remove(KeyModifiers::CONTROL);
+                key.modifiers.remove(KeyModifiers::ALT);
+            }
+            _ => {}
+        }
+    }
+
     match app.mode {
         AppMode::List => handle_list(app, key),
         AppMode::Writing { is_edit } => handle_writing(app, key, is_edit),
@@ -98,6 +114,20 @@ fn handle_journal_list(app: &mut App, key: KeyEvent) {
                 app.mode = AppMode::DeleteConfirm;
                 app.status_msg = None;
                 app.error_msg = None;
+            }
+        }
+        KeyCode::Char('a') => {
+            if !app.journal.entries.is_empty() {
+                app.status_msg = None;
+                app.error_msg = None;
+                app.attach_files();
+            }
+        }
+        KeyCode::Char('x') => {
+            if !app.filtered_entries().is_empty() {
+                app.status_msg = None;
+                app.error_msg = None;
+                app.export_entry_as_md();
             }
         }
         KeyCode::Esc => {

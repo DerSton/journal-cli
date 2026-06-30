@@ -134,6 +134,8 @@ pub struct App {
     pub search_query: String,
     /// Optional override date for the entry currently being written or edited.
     pub entry_date_for: Option<chrono::NaiveDate>,
+    /// Request a full terminal clear and cache reset on the next loop iteration.
+    pub redraw_requested: bool,
 }
 
 impl App {
@@ -171,6 +173,7 @@ impl App {
             should_quit: false,
             search_query: String::new(),
             entry_date_for: None,
+            redraw_requested: false,
         };
 
         app.sort_entries();
@@ -318,18 +321,21 @@ mod tests {
                 timestamp: Utc::now(),
                 content: "First entry with rust".to_string(),
                 date_for: None,
+                attachments: Vec::new(),
             },
             JournalEntry {
                 id: "2".to_string(),
                 timestamp: Utc::now(),
                 content: "Second entry with python".to_string(),
                 date_for: None,
+                attachments: Vec::new(),
             },
             JournalEntry {
                 id: "3".to_string(),
                 timestamp: Utc::now(),
                 content: "Third entry with rust programming".to_string(),
                 date_for: None,
+                attachments: Vec::new(),
             },
         ];
 
@@ -393,6 +399,7 @@ mod tests {
             timestamp: base_time,
             content: "Today".to_string(),
             date_for: None,
+            attachments: Vec::new(),
         };
 
         // Entry 2: Created today, but back-dated to 5 days ago
@@ -401,6 +408,7 @@ mod tests {
             timestamp: base_time + chrono::Duration::seconds(10),
             content: "Back-dated 5 days ago".to_string(),
             date_for: Some((base_time - chrono::Duration::days(5)).date_naive()),
+            attachments: Vec::new(),
         };
 
         // Entry 3: Created today, but back-dated to yesterday
@@ -409,6 +417,7 @@ mod tests {
             timestamp: base_time + chrono::Duration::seconds(20),
             content: "Back-dated yesterday".to_string(),
             date_for: Some((base_time - chrono::Duration::days(1)).date_naive()),
+            attachments: Vec::new(),
         };
 
         app.journal.entries = vec![e2.clone(), e1.clone(), e3.clone()];
