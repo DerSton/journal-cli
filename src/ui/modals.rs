@@ -26,6 +26,9 @@ pub fn draw_overlays(f: &mut Frame, app: &App) {
             current_date,
             ..
         } => draw_date_picker(f, app, field_index, current_date),
+        AppMode::AttachmentPicker {
+            selected_attachment_index,
+        } => draw_attachment_picker(f, app, selected_attachment_index),
         _ => {}
     }
 }
@@ -207,4 +210,75 @@ fn days_in_month(year: i32, month: u32) -> u32 {
         2 => 28,
         _ => 30,
     }
+}
+
+// ── Attachment picker modal ───────────────────────────────────────────────────
+
+fn draw_attachment_picker(f: &mut Frame, app: &App, selected: usize) {
+    let area = centered_rect(68, 48, f.area());
+    f.render_widget(Clear, area);
+
+    let real_idx = match app.selected_entry_idx() {
+        Some(idx) => idx,
+        None => return,
+    };
+    let entry = &app.journal.entries[real_idx];
+
+    let items: Vec<ListItem> = if entry.attachments.is_empty() {
+        vec![
+            ListItem::new(Line::from("")),
+            ListItem::new(Line::from(Span::styled(
+                "    No attachments on this entry.",
+                theme::muted(),
+            ))),
+            ListItem::new(Line::from("")),
+            ListItem::new(Line::from(vec![
+                Span::styled("    Press ", theme::muted()),
+                Span::styled("a", theme::accent()),
+                Span::styled(" to attach a new file.", theme::muted()),
+            ])),
+        ]
+    } else {
+        entry
+            .attachments
+            .iter()
+            .enumerate()
+            .map(|(idx, att)| {
+                let size_str = if att.size_bytes >= 1024 * 1024 {
+                    format!("{:.1} MiB", att.size_bytes as f64 / (1024.0 * 1024.0))
+                } else if att.size_bytes >= 1024 {
+                    format!("{:.1} KiB", att.size_bytes as f64 / 1024.0)
+                } else {
+                    format!("{} B", att.size_bytes)
+                };
+
+                let prefix = if idx == selected { " ▶ " } else { "   " };
+                let style = if idx == selected {
+                    theme::accent()
+                } else {
+                    theme::text()
+                };
+
+                ListItem::new(Line::from(vec![
+                    Span::styled(prefix, theme::accent()),
+                    Span::styled(format!("{:<30} ", att.filename), style),
+                    Span::styled(format!("({:<12}) ", att.mime_type), theme::muted()),
+                    Span::styled(size_str, theme::muted()),
+                ]))
+            })
+            .collect()
+    };
+
+    let mut state = ListState::default();
+    if !entry.attachments.is_empty() {
+        state.select(Some(selected));
+    }
+
+    f.render_stateful_widget(
+        List::new(items)
+            .block(theme::modal("  Manage Attachments  "))
+            .highlight_style(theme::list_highlight()),
+        area,
+        &mut state,
+    );
 }

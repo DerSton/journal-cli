@@ -72,6 +72,11 @@ pub enum AppMode {
     RecoveryReset,
     /// Filtering entries or contacts using a search string.
     Search,
+    /// Picking or managing an attachment of the currently selected journal entry.
+    AttachmentPicker {
+        /// The currently highlighted index in the attachment list.
+        selected_attachment_index: usize,
+    },
 }
 
 /// The global application state container.

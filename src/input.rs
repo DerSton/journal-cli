@@ -37,6 +37,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         AppMode::Recovery => handle_recovery(app, key),
         AppMode::RecoveryReset => handle_recovery_reset(app, key),
         AppMode::Search => handle_search(app, key),
+        AppMode::AttachmentPicker {
+            selected_attachment_index,
+        } => handle_attachment_picker(app, key, selected_attachment_index),
     }
 }
 
@@ -116,18 +119,20 @@ fn handle_journal_list(app: &mut App, key: KeyEvent) {
                 app.error_msg = None;
             }
         }
-        KeyCode::Char('a') => {
-            if !app.journal.entries.is_empty() {
-                app.status_msg = None;
-                app.error_msg = None;
-                app.attach_files();
-            }
-        }
         KeyCode::Char('x') => {
             if !app.filtered_entries().is_empty() {
                 app.status_msg = None;
                 app.error_msg = None;
                 app.export_entry_as_md();
+            }
+        }
+        KeyCode::Char('o') | KeyCode::Enter => {
+            if app.selected_entry_idx().is_some() {
+                app.status_msg = None;
+                app.error_msg = None;
+                app.mode = AppMode::AttachmentPicker {
+                    selected_attachment_index: 0,
+                };
             }
         }
         KeyCode::Esc => {
@@ -657,6 +662,75 @@ fn handle_search(app: &mut App, key: KeyEvent) {
         KeyCode::Char(c) => {
             app.search_query.push(c);
             app.selected_index = 0;
+        }
+        _ => {}
+    }
+}
+
+fn handle_attachment_picker(app: &mut App, key: KeyEvent, selected_attachment_index: usize) {
+    let real_idx = match app.selected_entry_idx() {
+        Some(idx) => idx,
+        None => {
+            app.mode = AppMode::List;
+            return;
+        }
+    };
+    let num_attachments = app.journal.entries[real_idx].attachments.len();
+
+    match key.code {
+        KeyCode::Esc => {
+            app.mode = AppMode::List;
+        }
+        KeyCode::Char('a') => {
+            app.status_msg = None;
+            app.error_msg = None;
+            app.attach_files();
+            // After attaching, update selected index to the last or newly added item
+            let num_left = app.journal.entries[real_idx].attachments.len();
+            let next_idx = selected_attachment_index.min(num_left.saturating_sub(1));
+            app.mode = AppMode::AttachmentPicker {
+                selected_attachment_index: next_idx,
+            };
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if num_attachments > 0 {
+                let next = if selected_attachment_index > 0 {
+                    selected_attachment_index - 1
+                } else {
+                    num_attachments - 1
+                };
+                app.mode = AppMode::AttachmentPicker {
+                    selected_attachment_index: next,
+                };
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if num_attachments > 0 {
+                let next = (selected_attachment_index + 1) % num_attachments;
+                app.mode = AppMode::AttachmentPicker {
+                    selected_attachment_index: next,
+                };
+            }
+        }
+        KeyCode::Char('s') | KeyCode::Char('e') | KeyCode::Enter => {
+            if num_attachments > 0 {
+                app.status_msg = None;
+                app.error_msg = None;
+                app.export_attachment(selected_attachment_index);
+            }
+        }
+        KeyCode::Char('d') | KeyCode::Delete => {
+            if num_attachments > 0 {
+                app.status_msg = None;
+                app.error_msg = None;
+                app.delete_attachment(selected_attachment_index);
+                // After deletion, we stay in picker mode (with empty state if 0)
+                let num_left = app.journal.entries[real_idx].attachments.len();
+                let next_idx = selected_attachment_index.min(num_left.saturating_sub(1));
+                app.mode = AppMode::AttachmentPicker {
+                    selected_attachment_index: next_idx,
+                };
+            }
         }
         _ => {}
     }
