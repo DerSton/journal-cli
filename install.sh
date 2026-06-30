@@ -15,14 +15,23 @@ echo "=== journal-cli Installer ==="
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
-if [ "$OS" != "Linux" ] || [ "$ARCH" != "x86_64" ]; then
-    echo "Error: Currently, prebuilt binaries are only provided for Linux (x86_64)."
-    echo "If you are on macOS or a different architecture, please install via Cargo:"
+if [ "$OS" = "Linux" ] && [ "$ARCH" = "x86_64" ]; then
+    ASSET_NAME="journal-cli-linux-x86_64"
+elif [ "$OS" = "Darwin" ]; then
+    if [ "$ARCH" = "x86_64" ]; then
+        ASSET_NAME="journal-cli-macos-x86_64"
+    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+        ASSET_NAME="journal-cli-macos-arm64"
+    else
+        echo "Error: Unsupported macOS architecture: $ARCH"
+        exit 1
+    fi
+else
+    echo "Error: Prebuilt binaries are only provided for Linux (x86_64) and macOS (x86_64/arm64)."
+    echo "If you are on another operating system or architecture, please install via Cargo:"
     echo "  cargo install --git https://github.com/DerSton/journal-cli"
     exit 1
 fi
-
-ASSET_NAME="journal-cli-linux-x86_64"
 
 # Fetch latest release version from GitHub API (including pre-releases)
 echo "Fetching latest release version from GitHub..."
@@ -45,7 +54,7 @@ fi
 mkdir -p "$INSTALL_DIR"
 
 # Download binary
-TEMP_FILE="$(mktemp)"
+TEMP_FILE="$(mktemp "${TMPDIR:-/tmp}/journal-cli.XXXXXXXXXX")"
 trap 'rm -f "$TEMP_FILE"' EXIT
 echo "Downloading journal-cli..."
 if command -v curl >/dev/null 2>&1; then
