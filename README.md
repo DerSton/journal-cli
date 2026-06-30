@@ -15,22 +15,26 @@ A private, encrypted journal in your terminal. Single binary, single file, no se
 
 ## Installation
 
-### Linux
+### Linux & macOS
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DerSton/journal-cli/main/install.sh | bash
 ```
 
 ### Windows (PowerShell)
+
 ```powershell
 irm https://raw.githubusercontent.com/DerSton/journal-cli/main/install.ps1 | iex
 ```
 
 ### Build from source
+
 ```bash
 git clone https://github.com/DerSton/journal-cli.git
 cd journal-cli
 cargo build --release
 ```
+
 The binary will be at `target/release/journal-cli` (or `journal-cli.exe` on Windows).
 
 ## Usage
@@ -38,8 +42,8 @@ The binary will be at `target/release/journal-cli` (or `journal-cli.exe` on Wind
 ```bash
 jnl [JOURNAL_PATH]
 ```
-*(Defaults to `journal.jrnl` in the current directory if omitted. Prompts to set master password on first launch).*
 
+_(Defaults to `journal.jrnl` in the current directory if omitted. Prompts to set master password on first launch)._
 
 ## License
 
