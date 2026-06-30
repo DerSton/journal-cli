@@ -162,7 +162,7 @@ fn build_hint_spans(app: &App) -> Vec<Span<'static>> {
                         v.extend(hint_pair("n", "New entry"));
                         v.extend(hint_pair("e", "Edit"));
                         v.extend(hint_pair("d", "Delete"));
-                        v.extend(hint_pair("Enter", "Attachments"));
+                        v.extend(hint_pair("a", "Attachments"));
                         v.extend(hint_pair("x", "Export .md"));
                         v.extend(hint_pair("PgUp/Dn", "Scroll"));
                     }

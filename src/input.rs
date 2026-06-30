@@ -20,13 +20,14 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
     }
 
-    match app.mode {
+    match app.mode.clone() {
         AppMode::List => handle_list(app, key),
         AppMode::Writing { is_edit } => handle_writing(app, key, is_edit),
         AppMode::ContactPicker {
             is_edit,
             selected_contact_index,
-        } => handle_contact_picker(app, key, is_edit, selected_contact_index),
+            search_query,
+        } => handle_contact_picker(app, key, is_edit, selected_contact_index, &search_query),
         AppMode::DatePicker {
             is_edit,
             field_index,
@@ -126,7 +127,7 @@ fn handle_journal_list(app: &mut App, key: KeyEvent) {
                 app.export_entry_as_md();
             }
         }
-        KeyCode::Char('o') | KeyCode::Enter => {
+        KeyCode::Char('a') => {
             if app.selected_entry_idx().is_some() {
                 app.status_msg = None;
                 app.error_msg = None;
@@ -304,11 +305,13 @@ fn handle_password_fields(
 fn handle_writing(app: &mut App, key: KeyEvent, is_edit: bool) {
     match app.active_tab {
         Tab::Journal => {
-            if key.code == KeyCode::Char('p') && key.modifiers.contains(KeyModifiers::ALT) {
+            if key.code == KeyCode::Char('@') {
+                app.textarea.input(key);
                 if !app.journal.contacts.is_empty() {
                     app.mode = AppMode::ContactPicker {
                         is_edit,
                         selected_contact_index: 0,
+                        search_query: String::new(),
                     };
                 }
             } else if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::ALT) {
@@ -380,16 +383,38 @@ fn handle_contact_form(app: &mut App, key: KeyEvent, is_edit: bool) {
     }
 }
 
+fn picker_filtered_contacts<'a>(
+    contacts: &'a [crate::model::Contact],
+    query: &str,
+) -> Vec<&'a crate::model::Contact> {
+    if query.trim().is_empty() {
+        contacts.iter().collect()
+    } else {
+        let q = query.to_lowercase();
+        contacts
+            .iter()
+            .filter(|c| {
+                c.full_name().to_lowercase().contains(&q) || c.nickname.to_lowercase().contains(&q)
+            })
+            .collect()
+    }
+}
+
 fn handle_contact_picker(
     app: &mut App,
     key: KeyEvent,
     is_edit: bool,
     selected_contact_index: usize,
+    search_query: &str,
 ) {
+    let filtered = picker_filtered_contacts(&app.journal.contacts, search_query);
+    let len = filtered.len();
+
     match key.code {
-        KeyCode::Esc => app.mode = AppMode::Writing { is_edit },
+        KeyCode::Esc => {
+            app.mode = AppMode::Writing { is_edit };
+        }
         KeyCode::Up | KeyCode::Char('k') => {
-            let len = app.journal.contacts.len();
             if len > 0 {
                 let next = if selected_contact_index > 0 {
                     selected_contact_index - 1
@@ -399,25 +424,55 @@ fn handle_contact_picker(
                 app.mode = AppMode::ContactPicker {
                     is_edit,
                     selected_contact_index: next,
+                    search_query: search_query.to_string(),
                 };
             }
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            let len = app.journal.contacts.len();
             if len > 0 {
                 let next = (selected_contact_index + 1) % len;
                 app.mode = AppMode::ContactPicker {
                     is_edit,
                     selected_contact_index: next,
+                    search_query: search_query.to_string(),
                 };
             }
         }
         KeyCode::Enter => {
-            if let Some(contact) = app.journal.contacts.get(selected_contact_index) {
+            if len > 0 && selected_contact_index < len {
+                let contact = filtered[selected_contact_index];
+                // Overwrite the '@' character we inserted
+                let backspace = KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty());
+                app.textarea.input(backspace);
+
                 let tag = contact.mention_tag();
                 app.textarea.insert_str(tag);
             }
             app.mode = AppMode::Writing { is_edit };
+        }
+        KeyCode::Backspace => {
+            let mut q = search_query.to_string();
+            if !q.is_empty() {
+                q.pop();
+                app.mode = AppMode::ContactPicker {
+                    is_edit,
+                    selected_contact_index: 0,
+                    search_query: q,
+                };
+            } else {
+                let backspace = KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty());
+                app.textarea.input(backspace);
+                app.mode = AppMode::Writing { is_edit };
+            }
+        }
+        KeyCode::Char(c) => {
+            let mut q = search_query.to_string();
+            q.push(c);
+            app.mode = AppMode::ContactPicker {
+                is_edit,
+                selected_contact_index: 0,
+                search_query: q,
+            };
         }
         _ => {}
     }
