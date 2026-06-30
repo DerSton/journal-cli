@@ -1,11 +1,6 @@
 name: Security Audit
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - "Cargo.lock"
-      - ".github/workflows/audit.yaml"
   pull_request:
     branches: ["main"]
     paths:
