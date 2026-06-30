@@ -6,6 +6,7 @@ on:
     paths:
       - "Cargo.lock"
       - "Cargo.toml"
+      - "deny.toml"
       - ".github/workflows/deny.yaml"
   schedule:
     - cron: "0 0 * * 0"
@@ -26,4 +27,3 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-          arguments: advisories bans
