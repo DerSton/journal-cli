@@ -169,39 +169,6 @@ fn draw_preview(f: &mut Frame, app: &mut App, area: Rect) {
         lines.push(render_mentions(line, &app.journal.contacts));
     }
 
-    if !entry.attachments.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
-            format!("  {}", "─".repeat((area.width as usize).saturating_sub(4))),
-            theme::dim(),
-        )));
-        lines.push(Line::from(Span::styled(
-            format!(
-                "  📎 {} attachment{}",
-                entry.attachments.len(),
-                if entry.attachments.len() == 1 {
-                    ""
-                } else {
-                    "s"
-                }
-            ),
-            theme::label(),
-        )));
-        for att in &entry.attachments {
-            let size_str = if att.size_bytes >= 1024 * 1024 {
-                format!("{:.1} MiB", att.size_bytes as f64 / (1024.0 * 1024.0))
-            } else if att.size_bytes >= 1024 {
-                format!("{:.1} KiB", att.size_bytes as f64 / 1024.0)
-            } else {
-                format!("{} B", att.size_bytes)
-            };
-            lines.push(Line::from(vec![
-                Span::styled(format!("    {} ", att.filename), theme::text()),
-                Span::styled(format!("({})", size_str), theme::muted()),
-            ]));
-        }
-    }
-
     let total_lines = lines.len();
     let scrollbar_needed = total_lines > area.height.saturating_sub(2) as usize;
 

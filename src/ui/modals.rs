@@ -8,7 +8,7 @@ use crate::app::{App, AppMode, Tab};
 use chrono::Datelike;
 use ratatui::{
     Frame,
-    layout::Alignment,
+    layout::{Alignment, Constraint, Direction, Layout},
     text::{Line, Span},
     widgets::{Clear, List, ListItem, ListState, Paragraph},
 };
@@ -19,13 +19,17 @@ pub fn draw_overlays(f: &mut Frame, app: &App) {
         AppMode::DeleteConfirm => draw_delete_confirm(f, app),
         AppMode::ContactPicker {
             selected_contact_index,
+            ref search_query,
             ..
-        } => draw_contact_picker(f, app, selected_contact_index),
+        } => draw_contact_picker(f, app, selected_contact_index, search_query),
         AppMode::DatePicker {
             field_index,
             current_date,
             ..
         } => draw_date_picker(f, app, field_index, current_date),
+        AppMode::AttachmentPicker {
+            selected_attachment_index,
+        } => draw_attachment_picker(f, app, selected_attachment_index),
         _ => {}
     }
 }
@@ -71,13 +75,51 @@ fn draw_delete_confirm(f: &mut Frame, app: &App) {
 
 // ── Contact picker ────────────────────────────────────────────────────────────
 
-fn draw_contact_picker(f: &mut Frame, app: &App, selected: usize) {
-    let area = centered_rect(56, 52, f.area());
+fn picker_filtered_contacts<'a>(
+    contacts: &'a [crate::model::Contact],
+    query: &str,
+) -> Vec<&'a crate::model::Contact> {
+    if query.trim().is_empty() {
+        contacts.iter().collect()
+    } else {
+        let q = query.to_lowercase();
+        contacts
+            .iter()
+            .filter(|c| {
+                c.full_name().to_lowercase().contains(&q) || c.nickname.to_lowercase().contains(&q)
+            })
+            .collect()
+    }
+}
+
+fn draw_contact_picker(f: &mut Frame, app: &App, selected: usize, search_query: &str) {
+    let area = centered_rect(60, 56, f.area());
     f.render_widget(Clear, area);
 
-    let items: Vec<ListItem> = app
-        .journal
-        .contacts
+    // Render outer block for the modal
+    let block = theme::modal("  Mention a person  ");
+    let inner_area = block.inner(area);
+    f.render_widget(block, area);
+
+    let [search_area, list_area] = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .areas(inner_area);
+
+    // Search query box
+    let display_query = format!(" {}", search_query);
+    f.render_widget(
+        Paragraph::new(Line::from(Span::styled(display_query, theme::text()))).block(theme::field(
+            "Search (Type to filter · Backspace to delete/close)",
+            true,
+        )),
+        search_area,
+    );
+
+    // Filter contacts based on query
+    let filtered = picker_filtered_contacts(&app.journal.contacts, search_query);
+
+    let items: Vec<ListItem> = filtered
         .iter()
         .map(|c| {
             ListItem::new(Line::from(Span::styled(
@@ -88,15 +130,15 @@ fn draw_contact_picker(f: &mut Frame, app: &App, selected: usize) {
         .collect();
 
     let mut state = ListState::default();
-    if !app.journal.contacts.is_empty() {
+    if !filtered.is_empty() {
         state.select(Some(selected));
     }
 
     f.render_stateful_widget(
         List::new(items)
-            .block(theme::modal("  Mention a person"))
+            .block(theme::panel("Select Person"))
             .highlight_style(theme::list_highlight()),
-        area,
+        list_area,
         &mut state,
     );
 }
@@ -207,4 +249,75 @@ fn days_in_month(year: i32, month: u32) -> u32 {
         2 => 28,
         _ => 30,
     }
+}
+
+// ── Attachment picker modal ───────────────────────────────────────────────────
+
+fn draw_attachment_picker(f: &mut Frame, app: &App, selected: usize) {
+    let area = centered_rect(68, 48, f.area());
+    f.render_widget(Clear, area);
+
+    let real_idx = match app.selected_entry_idx() {
+        Some(idx) => idx,
+        None => return,
+    };
+    let entry = &app.journal.entries[real_idx];
+
+    let items: Vec<ListItem> = if entry.attachments.is_empty() {
+        vec![
+            ListItem::new(Line::from("")),
+            ListItem::new(Line::from(Span::styled(
+                "    No attachments on this entry.",
+                theme::muted(),
+            ))),
+            ListItem::new(Line::from("")),
+            ListItem::new(Line::from(vec![
+                Span::styled("    Press ", theme::muted()),
+                Span::styled("a", theme::accent()),
+                Span::styled(" to attach a new file.", theme::muted()),
+            ])),
+        ]
+    } else {
+        entry
+            .attachments
+            .iter()
+            .enumerate()
+            .map(|(idx, att)| {
+                let size_str = if att.size_bytes >= 1024 * 1024 {
+                    format!("{:.1} MiB", att.size_bytes as f64 / (1024.0 * 1024.0))
+                } else if att.size_bytes >= 1024 {
+                    format!("{:.1} KiB", att.size_bytes as f64 / 1024.0)
+                } else {
+                    format!("{} B", att.size_bytes)
+                };
+
+                let prefix = if idx == selected { " ▶ " } else { "   " };
+                let style = if idx == selected {
+                    theme::accent()
+                } else {
+                    theme::text()
+                };
+
+                ListItem::new(Line::from(vec![
+                    Span::styled(prefix, theme::accent()),
+                    Span::styled(format!("{:<30} ", att.filename), style),
+                    Span::styled(format!("({:<12}) ", att.mime_type), theme::muted()),
+                    Span::styled(size_str, theme::muted()),
+                ]))
+            })
+            .collect()
+    };
+
+    let mut state = ListState::default();
+    if !entry.attachments.is_empty() {
+        state.select(Some(selected));
+    }
+
+    f.render_stateful_widget(
+        List::new(items)
+            .block(theme::modal("  Manage Attachments  "))
+            .highlight_style(theme::list_highlight()),
+        area,
+        &mut state,
+    );
 }

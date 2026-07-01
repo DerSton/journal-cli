@@ -37,7 +37,7 @@ pub const SETTINGS_GROUPS: &[&str] = &[
 ];
 
 /// The application's current input and focus state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppMode {
     /// Browsing a list (journal entries, contacts, or settings groups).
     List,
@@ -52,6 +52,8 @@ pub enum AppMode {
         is_edit: bool,
         /// The currently highlighted index in the contact picker modal.
         selected_contact_index: usize,
+        /// The current search query inside the contact picker.
+        search_query: String,
     },
     /// Calendar overlay for a date field.
     DatePicker {
@@ -72,6 +74,11 @@ pub enum AppMode {
     RecoveryReset,
     /// Filtering entries or contacts using a search string.
     Search,
+    /// Picking or managing an attachment of the currently selected journal entry.
+    AttachmentPicker {
+        /// The currently highlighted index in the attachment list.
+        selected_attachment_index: usize,
+    },
 }
 
 /// The global application state container.

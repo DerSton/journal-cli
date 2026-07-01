@@ -20,13 +20,14 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
     }
 
-    match app.mode {
+    match app.mode.clone() {
         AppMode::List => handle_list(app, key),
         AppMode::Writing { is_edit } => handle_writing(app, key, is_edit),
         AppMode::ContactPicker {
             is_edit,
             selected_contact_index,
-        } => handle_contact_picker(app, key, is_edit, selected_contact_index),
+            search_query,
+        } => handle_contact_picker(app, key, is_edit, selected_contact_index, &search_query),
         AppMode::DatePicker {
             is_edit,
             field_index,
@@ -37,6 +38,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         AppMode::Recovery => handle_recovery(app, key),
         AppMode::RecoveryReset => handle_recovery_reset(app, key),
         AppMode::Search => handle_search(app, key),
+        AppMode::AttachmentPicker {
+            selected_attachment_index,
+        } => handle_attachment_picker(app, key, selected_attachment_index),
     }
 }
 
@@ -116,18 +120,20 @@ fn handle_journal_list(app: &mut App, key: KeyEvent) {
                 app.error_msg = None;
             }
         }
-        KeyCode::Char('a') => {
-            if !app.journal.entries.is_empty() {
-                app.status_msg = None;
-                app.error_msg = None;
-                app.attach_files();
-            }
-        }
         KeyCode::Char('x') => {
             if !app.filtered_entries().is_empty() {
                 app.status_msg = None;
                 app.error_msg = None;
                 app.export_entry_as_md();
+            }
+        }
+        KeyCode::Char('a') => {
+            if app.selected_entry_idx().is_some() {
+                app.status_msg = None;
+                app.error_msg = None;
+                app.mode = AppMode::AttachmentPicker {
+                    selected_attachment_index: 0,
+                };
             }
         }
         KeyCode::Esc => {
@@ -299,11 +305,13 @@ fn handle_password_fields(
 fn handle_writing(app: &mut App, key: KeyEvent, is_edit: bool) {
     match app.active_tab {
         Tab::Journal => {
-            if key.code == KeyCode::Char('p') && key.modifiers.contains(KeyModifiers::ALT) {
+            if key.code == KeyCode::Char('@') {
+                app.textarea.input(key);
                 if !app.journal.contacts.is_empty() {
                     app.mode = AppMode::ContactPicker {
                         is_edit,
                         selected_contact_index: 0,
+                        search_query: String::new(),
                     };
                 }
             } else if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::ALT) {
@@ -375,16 +383,38 @@ fn handle_contact_form(app: &mut App, key: KeyEvent, is_edit: bool) {
     }
 }
 
+fn picker_filtered_contacts<'a>(
+    contacts: &'a [crate::model::Contact],
+    query: &str,
+) -> Vec<&'a crate::model::Contact> {
+    if query.trim().is_empty() {
+        contacts.iter().collect()
+    } else {
+        let q = query.to_lowercase();
+        contacts
+            .iter()
+            .filter(|c| {
+                c.full_name().to_lowercase().contains(&q) || c.nickname.to_lowercase().contains(&q)
+            })
+            .collect()
+    }
+}
+
 fn handle_contact_picker(
     app: &mut App,
     key: KeyEvent,
     is_edit: bool,
     selected_contact_index: usize,
+    search_query: &str,
 ) {
+    let filtered = picker_filtered_contacts(&app.journal.contacts, search_query);
+    let len = filtered.len();
+
     match key.code {
-        KeyCode::Esc => app.mode = AppMode::Writing { is_edit },
+        KeyCode::Esc => {
+            app.mode = AppMode::Writing { is_edit };
+        }
         KeyCode::Up | KeyCode::Char('k') => {
-            let len = app.journal.contacts.len();
             if len > 0 {
                 let next = if selected_contact_index > 0 {
                     selected_contact_index - 1
@@ -394,25 +424,55 @@ fn handle_contact_picker(
                 app.mode = AppMode::ContactPicker {
                     is_edit,
                     selected_contact_index: next,
+                    search_query: search_query.to_string(),
                 };
             }
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            let len = app.journal.contacts.len();
             if len > 0 {
                 let next = (selected_contact_index + 1) % len;
                 app.mode = AppMode::ContactPicker {
                     is_edit,
                     selected_contact_index: next,
+                    search_query: search_query.to_string(),
                 };
             }
         }
         KeyCode::Enter => {
-            if let Some(contact) = app.journal.contacts.get(selected_contact_index) {
+            if len > 0 && selected_contact_index < len {
+                let contact = filtered[selected_contact_index];
+                // Overwrite the '@' character we inserted
+                let backspace = KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty());
+                app.textarea.input(backspace);
+
                 let tag = contact.mention_tag();
                 app.textarea.insert_str(tag);
             }
             app.mode = AppMode::Writing { is_edit };
+        }
+        KeyCode::Backspace => {
+            let mut q = search_query.to_string();
+            if !q.is_empty() {
+                q.pop();
+                app.mode = AppMode::ContactPicker {
+                    is_edit,
+                    selected_contact_index: 0,
+                    search_query: q,
+                };
+            } else {
+                let backspace = KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty());
+                app.textarea.input(backspace);
+                app.mode = AppMode::Writing { is_edit };
+            }
+        }
+        KeyCode::Char(c) => {
+            let mut q = search_query.to_string();
+            q.push(c);
+            app.mode = AppMode::ContactPicker {
+                is_edit,
+                selected_contact_index: 0,
+                search_query: q,
+            };
         }
         _ => {}
     }
@@ -657,6 +717,75 @@ fn handle_search(app: &mut App, key: KeyEvent) {
         KeyCode::Char(c) => {
             app.search_query.push(c);
             app.selected_index = 0;
+        }
+        _ => {}
+    }
+}
+
+fn handle_attachment_picker(app: &mut App, key: KeyEvent, selected_attachment_index: usize) {
+    let real_idx = match app.selected_entry_idx() {
+        Some(idx) => idx,
+        None => {
+            app.mode = AppMode::List;
+            return;
+        }
+    };
+    let num_attachments = app.journal.entries[real_idx].attachments.len();
+
+    match key.code {
+        KeyCode::Esc => {
+            app.mode = AppMode::List;
+        }
+        KeyCode::Char('a') => {
+            app.status_msg = None;
+            app.error_msg = None;
+            app.attach_files();
+            // After attaching, update selected index to the last or newly added item
+            let num_left = app.journal.entries[real_idx].attachments.len();
+            let next_idx = selected_attachment_index.min(num_left.saturating_sub(1));
+            app.mode = AppMode::AttachmentPicker {
+                selected_attachment_index: next_idx,
+            };
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if num_attachments > 0 {
+                let next = if selected_attachment_index > 0 {
+                    selected_attachment_index - 1
+                } else {
+                    num_attachments - 1
+                };
+                app.mode = AppMode::AttachmentPicker {
+                    selected_attachment_index: next,
+                };
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if num_attachments > 0 {
+                let next = (selected_attachment_index + 1) % num_attachments;
+                app.mode = AppMode::AttachmentPicker {
+                    selected_attachment_index: next,
+                };
+            }
+        }
+        KeyCode::Char('s') | KeyCode::Char('e') | KeyCode::Enter => {
+            if num_attachments > 0 {
+                app.status_msg = None;
+                app.error_msg = None;
+                app.export_attachment(selected_attachment_index);
+            }
+        }
+        KeyCode::Char('d') | KeyCode::Delete => {
+            if num_attachments > 0 {
+                app.status_msg = None;
+                app.error_msg = None;
+                app.delete_attachment(selected_attachment_index);
+                // After deletion, we stay in picker mode (with empty state if 0)
+                let num_left = app.journal.entries[real_idx].attachments.len();
+                let next_idx = selected_attachment_index.min(num_left.saturating_sub(1));
+                app.mode = AppMode::AttachmentPicker {
+                    selected_attachment_index: next_idx,
+                };
+            }
         }
         _ => {}
     }

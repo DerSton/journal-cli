@@ -162,7 +162,7 @@ fn build_hint_spans(app: &App) -> Vec<Span<'static>> {
                         v.extend(hint_pair("n", "New entry"));
                         v.extend(hint_pair("e", "Edit"));
                         v.extend(hint_pair("d", "Delete"));
-                        v.extend(hint_pair("a", "Attach"));
+                        v.extend(hint_pair("a", "Attachments"));
                         v.extend(hint_pair("x", "Export .md"));
                         v.extend(hint_pair("PgUp/Dn", "Scroll"));
                     }
@@ -215,6 +215,13 @@ fn build_hint_spans(app: &App) -> Vec<Span<'static>> {
         AppMode::Search => {
             v.extend(hint_pair("Enter", "Lock filter"));
             v.extend(hint_pair("Esc", "Clear"));
+        }
+        AppMode::AttachmentPicker { .. } => {
+            v.extend(hint_pair("↑↓", "Select"));
+            v.extend(hint_pair("a", "Attach"));
+            v.extend(hint_pair("Enter/s", "Save"));
+            v.extend(hint_pair("d/Del", "Delete"));
+            v.extend(hint_pair("Esc", "Back"));
         }
         AppMode::Login | AppMode::Recovery | AppMode::RecoveryReset => {}
     }
