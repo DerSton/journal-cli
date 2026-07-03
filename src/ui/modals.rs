@@ -35,8 +35,36 @@ pub fn draw_overlays(f: &mut Frame, app: &App) {
         AppMode::AttachmentPicker {
             selected_attachment_index,
         } => draw_attachment_picker(f, app, selected_attachment_index),
+        AppMode::DiscardConfirm { .. } => draw_discard_confirm(f, app),
         _ => {}
     }
+}
+
+// ── Discard confirmation ──────────────────────────────────────────────────────
+
+fn draw_discard_confirm(f: &mut Frame, _app: &App) {
+    let area = centered_rect(46, 28, f.area());
+    f.render_widget(Clear, area);
+
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled("Discard unsaved changes?", theme::text()))
+                .alignment(Alignment::Center),
+            Line::from(Span::styled("All edits will be lost.", theme::muted()))
+                .alignment(Alignment::Center),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  y  ", theme::danger()),
+                Span::styled("Discard", theme::muted()),
+                Span::styled("     n / Esc  ", theme::accent()),
+                Span::styled("Cancel  ", theme::muted()),
+            ])
+            .alignment(Alignment::Center),
+        ])
+        .block(theme::modal_danger("  Discard Changes")),
+        area,
+    );
 }
 
 // ── Delete confirmation ───────────────────────────────────────────────────────

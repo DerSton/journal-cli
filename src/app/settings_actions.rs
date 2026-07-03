@@ -85,4 +85,58 @@ impl App {
         self.status_msg = Some("Recovery shares generated".to_string());
         Ok(())
     }
+
+    /// Exports the generated recovery shares to a text file.
+    pub fn export_recovery_shares(&mut self) {
+        if self.generated_shares.is_empty() {
+            self.error_msg = Some("No recovery shares generated yet".to_string());
+            return;
+        }
+
+        let mut content = String::new();
+        content.push_str("=== journal-cli Recovery Shares ===\n");
+        content.push_str(
+            "Keep these shares separate! Any T of them can reconstruct your master password.\n\n",
+        );
+        for (idx, share) in self.generated_shares.iter().enumerate() {
+            content.push_str(&format!("Share {}: {}\n", idx + 1, share));
+        }
+
+        // Suspend TUI for native dialog.
+        let _ = crossterm::terminal::disable_raw_mode();
+        let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen);
+
+        let dest = std::thread::spawn(move || {
+            rfd::FileDialog::new()
+                .set_title("Export recovery shares")
+                .set_file_name("journal_recovery_shares.txt")
+                .add_filter("Text", &["txt"])
+                .save_file()
+        })
+        .join()
+        .unwrap_or(None);
+
+        // Restore TUI.
+        let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen);
+        let _ = crossterm::terminal::enable_raw_mode();
+        self.redraw_requested = true;
+
+        let path = match dest {
+            Some(p) => p,
+            None => {
+                self.status_msg = Some("Export cancelled".to_string());
+                return;
+            }
+        };
+
+        match std::fs::write(&path, content.as_bytes()) {
+            Ok(_) => {
+                self.status_msg = Some(format!("Exported shares to {}", path.display()));
+                self.error_msg = None;
+            }
+            Err(e) => {
+                self.error_msg = Some(format!("Export failed: {}", e));
+            }
+        }
+    }
 }

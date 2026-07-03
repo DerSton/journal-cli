@@ -39,6 +39,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             search_query,
         } => handle_group_member_picker(app, key, is_edit, selected_contact_index, &search_query),
         AppMode::DeleteConfirm => handle_delete_confirm(app, key),
+        AppMode::DiscardConfirm { is_edit } => handle_discard_confirm(app, key, is_edit),
         AppMode::Login => handle_login(app, key),
         AppMode::Recovery => handle_recovery(app, key),
         AppMode::RecoveryReset => handle_recovery_reset(app, key),
@@ -175,6 +176,12 @@ fn handle_contacts_list(app: &mut App, key: KeyEvent) {
                 app.error_msg = None;
             }
         }
+        KeyCode::PageUp => {
+            app.detail_scroll = app.detail_scroll.saturating_sub(1);
+        }
+        KeyCode::PageDown => {
+            app.detail_scroll = app.detail_scroll.saturating_add(1);
+        }
         KeyCode::Esc => {
             app.should_quit = true;
         }
@@ -207,6 +214,12 @@ fn handle_groups_list(app: &mut App, key: KeyEvent) {
                 app.error_msg = None;
             }
         }
+        KeyCode::PageUp => {
+            app.detail_scroll = app.detail_scroll.saturating_sub(1);
+        }
+        KeyCode::PageDown => {
+            app.detail_scroll = app.detail_scroll.saturating_add(1);
+        }
         KeyCode::Esc => {
             app.should_quit = true;
         }
@@ -238,6 +251,16 @@ fn handle_stats_list(app: &mut App, key: KeyEvent) {
 fn handle_settings_panel(app: &mut App, key: KeyEvent) {
     if key.code == KeyCode::Esc {
         app.settings_panel_focused = false;
+        app.detail_scroll = 0;
+        return;
+    }
+
+    if key.code == KeyCode::PageUp {
+        app.detail_scroll = app.detail_scroll.saturating_sub(1);
+        return;
+    }
+    if key.code == KeyCode::PageDown {
+        app.detail_scroll = app.detail_scroll.saturating_add(1);
         return;
     }
 
@@ -248,6 +271,7 @@ fn handle_settings_panel(app: &mut App, key: KeyEvent) {
             |app| app.change_password(),
             |app| {
                 app.settings_panel_focused = false;
+                app.detail_scroll = 0;
             },
         ),
         1 => match key.code {
@@ -300,6 +324,9 @@ fn handle_settings_panel(app: &mut App, key: KeyEvent) {
                     app.error_msg = Some(format!("Failed to generate shares: {}", e));
                 }
             }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                app.export_recovery_shares();
+            }
             _ => {}
         },
         _ => {}
@@ -319,6 +346,19 @@ fn handle_password_fields(
         app.settings_active_field = (app.settings_active_field + 1) % 2;
     } else if key.code == KeyCode::BackTab || key.code == KeyCode::Up {
         app.settings_active_field = if app.settings_active_field == 0 { 1 } else { 0 };
+    } else if key.code == KeyCode::Enter {
+        if app.settings_active_field == 0 {
+            app.settings_active_field = 1;
+        } else {
+            match on_submit(app) {
+                Ok(_) => {
+                    app.status_msg = Some("Password changed and journal re-encrypted".to_string());
+                    app.error_msg = None;
+                    on_success(app);
+                }
+                Err(e) => app.error_msg = Some(e),
+            }
+        }
     } else if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
         match on_submit(app) {
             Ok(_) => {
@@ -344,8 +384,11 @@ fn handle_password_fields(
 fn handle_writing(app: &mut App, key: KeyEvent, is_edit: bool) {
     match app.active_tab {
         Tab::Journal => {
-            if key.code == KeyCode::Char('@') {
-                app.textarea.input(key);
+            if key.code == KeyCode::Char('@')
+                || (key.code == KeyCode::Char('p') && key.modifiers.contains(KeyModifiers::ALT))
+            {
+                let at_key = KeyEvent::new(KeyCode::Char('@'), KeyModifiers::empty());
+                app.textarea.input(at_key);
                 if !app.journal.contacts.is_empty() {
                     app.mode = AppMode::ContactPicker {
                         is_edit,
@@ -366,7 +409,11 @@ fn handle_writing(app: &mut App, key: KeyEvent, is_edit: bool) {
             {
                 app.save_entry();
             } else if key.code == KeyCode::Esc {
-                app.mode = AppMode::List;
+                if app.is_dirty() {
+                    app.mode = AppMode::DiscardConfirm { is_edit };
+                } else {
+                    app.mode = AppMode::List;
+                }
             } else {
                 app.textarea.input(key);
             }
@@ -383,7 +430,11 @@ fn handle_contact_form(app: &mut App, key: KeyEvent, is_edit: bool) {
         return;
     }
     if key.code == KeyCode::Esc {
-        app.mode = AppMode::List;
+        if app.is_dirty() {
+            app.mode = AppMode::DiscardConfirm { is_edit };
+        } else {
+            app.mode = AppMode::List;
+        }
         return;
     }
 
@@ -429,7 +480,11 @@ fn handle_group_form(app: &mut App, key: KeyEvent, is_edit: bool) {
         return;
     }
     if key.code == KeyCode::Esc {
-        app.mode = AppMode::List;
+        if app.is_dirty() {
+            app.mode = AppMode::DiscardConfirm { is_edit };
+        } else {
+            app.mode = AppMode::List;
+        }
         return;
     }
 
@@ -703,6 +758,18 @@ fn handle_delete_confirm(app: &mut App, key: KeyEvent) {
     }
 }
 
+fn handle_discard_confirm(app: &mut App, key: KeyEvent, is_edit: bool) {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            app.mode = AppMode::List;
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            app.mode = AppMode::Writing { is_edit };
+        }
+        _ => {}
+    }
+}
+
 fn handle_login(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Enter => {
@@ -731,6 +798,7 @@ fn handle_login(app: &mut App, key: KeyEvent) {
             app.recovery_textarea = ratatui_textarea::TextArea::default();
             app.recovery_status_msg = None;
             app.error_msg = None;
+            app.detail_scroll = 0;
         }
         KeyCode::Char(c) => app.login_password.push(c),
         KeyCode::Backspace => {
@@ -748,6 +816,7 @@ fn handle_recovery(app: &mut App, key: KeyEvent) {
             app.error_msg = None;
             app.recovery_status_msg = None;
             app.login_password.clear();
+            app.detail_scroll = 0;
         }
         _ => {
             app.recovery_textarea.input(key);
@@ -788,6 +857,11 @@ fn submit_recovery_share(app: &mut App) {
     app.recovery_shares.push(share_str);
     app.recovery_textarea = ratatui_textarea::TextArea::default();
     app.recovery_status_msg = Some(format!("Added share {}", parsed.index));
+
+    let len = app.recovery_shares.len();
+    if len > 5 {
+        app.detail_scroll = (len - 5) as u16;
+    }
 
     if app.recovery_shares.len() < parsed.threshold {
         return;

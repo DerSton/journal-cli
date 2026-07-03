@@ -291,4 +291,32 @@ impl App {
             .filter(|entry| entry.content.contains(&target))
             .collect()
     }
+
+    /// Checks if the group form has any unsaved modifications.
+    pub fn is_group_form_dirty(&self, is_edit: bool) -> bool {
+        let current = match self.group_form.to_group(String::new()) {
+            Ok(g) => g,
+            Err(_) => return true,
+        };
+        if is_edit {
+            if let Some(real_idx) = self.selected_group_idx() {
+                let original = &self.journal.groups[real_idx];
+                let original_member_ids: HashSet<String> =
+                    original.member_ids.iter().cloned().collect();
+                original.name != current.name
+                    || original.description != current.description
+                    || original.start_date != current.start_date
+                    || original.end_date != current.end_date
+                    || original_member_ids != self.group_form.selected_member_ids
+            } else {
+                true
+            }
+        } else {
+            !current.name.is_empty()
+                || !current.description.is_empty()
+                || current.start_date.is_some()
+                || current.end_date.is_some()
+                || !current.member_ids.is_empty()
+        }
+    }
 }

@@ -5,10 +5,12 @@ use crate::app::{App, AppMode, ContactField};
 use crate::model::{BLOOD_TYPE_OPTIONS, Contact, MARITAL_STATUS_OPTIONS};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    layout::{Alignment, Margin, Rect},
     style::Modifier,
     text::{Line, Span},
-    widgets::{List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{
+        List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap,
+    },
 };
 use ratatui_textarea::TextArea;
 
@@ -115,18 +117,10 @@ fn draw_profile(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let contact = filtered[app.selected_index];
-
-    // Split into profile card (top 60 %) and mentions panel (bottom 40 %).
-    let [card_area, mentions_area] = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-        .areas(area);
-
-    draw_profile_card(f, contact, card_area);
-    draw_mentions_panel(f, app, contact, mentions_area);
+    draw_profile_card(f, app, contact, area);
 }
 
-fn draw_profile_card(f: &mut Frame, c: &Contact, area: Rect) {
+fn draw_profile_card(f: &mut Frame, app: &App, c: &Contact, area: Rect) {
     let mut lines = vec![
         Line::from(""),
         Line::from(Span::styled(
@@ -225,37 +219,19 @@ fn draw_profile_card(f: &mut Frame, c: &Contact, area: Rect) {
         }
     }
 
-    f.render_widget(
-        Paragraph::new(lines)
-            .block(theme::panel("Profile"))
-            .wrap(Wrap { trim: false }),
-        area,
-    );
-}
-
-fn draw_mentions_panel(f: &mut Frame, app: &App, contact: &Contact, area: Rect) {
-    let mentions = app.get_mentions_for_contact(&contact.id);
-    let block = theme::panel("Journal mentions");
-
-    if mentions.is_empty() {
-        f.render_widget(
-            Paragraph::new(vec![
-                Line::from(""),
-                Line::from(Span::styled(
-                    format!("No mentions of {} yet", contact.display_name()),
-                    theme::muted(),
-                ))
-                .alignment(Alignment::Center),
-            ])
-            .block(block),
-            area,
-        );
-        return;
-    }
-
-    let items: Vec<ListItem> = mentions
-        .iter()
-        .map(|entry| {
+    let mentions = app.get_mentions_for_contact(&c.id);
+    if !mentions.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  Journal Mentions",
+            theme::label(),
+        )));
+        lines.push(Line::from(Span::styled(
+            format!("  {}", "─".repeat((area.width as usize).saturating_sub(4))),
+            theme::dim(),
+        )));
+        lines.push(Line::from(""));
+        for entry in mentions {
             let date = app.journal.format_date_short(&entry.timestamp);
             let snippet: String = entry
                 .content
@@ -271,14 +247,41 @@ fn draw_mentions_panel(f: &mut Frame, app: &App, contact: &Contact, area: Rect) 
             } else {
                 snippet
             };
-            ListItem::new(Line::from(vec![
-                Span::styled(format!(" {} ", date), theme::label()),
+            lines.push(Line::from(vec![
+                Span::styled(format!("    {}  ", date), theme::accent()),
                 Span::styled(snippet, theme::text()),
-            ]))
-        })
-        .collect();
+            ]));
+        }
+    }
 
-    f.render_widget(List::new(items).block(block), area);
+    let total_lines = lines.len();
+    let scrollbar_needed = total_lines > area.height.saturating_sub(2) as usize;
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(theme::panel("Profile"))
+            .wrap(Wrap { trim: false })
+            .scroll((app.detail_scroll, 0)),
+        area,
+    );
+
+    if scrollbar_needed {
+        let visible = area.height.saturating_sub(2) as usize;
+        let mut sb_state = ScrollbarState::default()
+            .content_length(total_lines.saturating_sub(visible))
+            .position(app.detail_scroll as usize);
+        f.render_stateful_widget(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼")),
+            area.inner(Margin {
+                horizontal: 0,
+                vertical: 1,
+            }),
+            &mut sb_state,
+        );
+    }
 }
 
 // ── Contact form ──────────────────────────────────────────────────────────────
@@ -534,15 +537,7 @@ fn draw_group_profile(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let group = filtered[app.selected_index];
-
-    // Split into profile card (top 60 %) and mentions panel (bottom 40 %).
-    let [card_area, mentions_area] = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-        .areas(area);
-
-    draw_group_profile_card(f, app, group, card_area);
-    draw_group_mentions_panel(f, app, group, mentions_area);
+    draw_group_profile_card(f, app, group, area);
 }
 
 fn draw_group_profile_card(f: &mut Frame, app: &App, g: &crate::model::Group, area: Rect) {
@@ -609,37 +604,19 @@ fn draw_group_profile_card(f: &mut Frame, app: &App, g: &crate::model::Group, ar
         }
     }
 
-    f.render_widget(
-        Paragraph::new(lines)
-            .block(theme::panel("Group Profile"))
-            .wrap(Wrap { trim: false }),
-        area,
-    );
-}
-
-fn draw_group_mentions_panel(f: &mut Frame, app: &App, group: &crate::model::Group, area: Rect) {
-    let mentions = app.get_mentions_for_group(&group.id);
-    let block = theme::panel("Journal mentions");
-
-    if mentions.is_empty() {
-        f.render_widget(
-            Paragraph::new(vec![
-                Line::from(""),
-                Line::from(Span::styled(
-                    format!("No mentions of {} yet", group.name),
-                    theme::muted(),
-                ))
-                .alignment(Alignment::Center),
-            ])
-            .block(block),
-            area,
-        );
-        return;
-    }
-
-    let items: Vec<ListItem> = mentions
-        .iter()
-        .map(|entry| {
+    let mentions = app.get_mentions_for_group(&g.id);
+    if !mentions.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  Journal Mentions",
+            theme::label(),
+        )));
+        lines.push(Line::from(Span::styled(
+            format!("  {}", "─".repeat((area.width as usize).saturating_sub(4))),
+            theme::dim(),
+        )));
+        lines.push(Line::from(""));
+        for entry in mentions {
             let date = app.journal.format_date_short(&entry.timestamp);
             let snippet: String = entry
                 .content
@@ -655,14 +632,41 @@ fn draw_group_mentions_panel(f: &mut Frame, app: &App, group: &crate::model::Gro
             } else {
                 snippet
             };
-            ListItem::new(Line::from(vec![
-                Span::styled(format!(" {} ", date), theme::label()),
+            lines.push(Line::from(vec![
+                Span::styled(format!("    {}  ", date), theme::accent()),
                 Span::styled(snippet, theme::text()),
-            ]))
-        })
-        .collect();
+            ]));
+        }
+    }
 
-    f.render_widget(List::new(items).block(block), area);
+    let total_lines = lines.len();
+    let scrollbar_needed = total_lines > area.height.saturating_sub(2) as usize;
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(theme::panel("Group Profile"))
+            .wrap(Wrap { trim: false })
+            .scroll((app.detail_scroll, 0)),
+        area,
+    );
+
+    if scrollbar_needed {
+        let visible = area.height.saturating_sub(2) as usize;
+        let mut sb_state = ScrollbarState::default()
+            .content_length(total_lines.saturating_sub(visible))
+            .position(app.detail_scroll as usize);
+        f.render_stateful_widget(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼")),
+            area.inner(Margin {
+                horizontal: 0,
+                vertical: 1,
+            }),
+            &mut sb_state,
+        );
+    }
 }
 
 fn group_field_height(field: &crate::app::GroupField) -> u16 {

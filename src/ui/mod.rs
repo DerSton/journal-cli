@@ -225,6 +225,10 @@ fn build_hint_spans(app: &App) -> Vec<Span<'static>> {
             v.extend(hint_pair("y", "Delete"));
             v.extend(hint_pair("Esc", "Cancel"));
         }
+        AppMode::DiscardConfirm { .. } => {
+            v.extend(hint_pair("y", "Discard"));
+            v.extend(hint_pair("Esc/n", "Cancel"));
+        }
         AppMode::Search => {
             v.extend(hint_pair("Enter", "Lock filter"));
             v.extend(hint_pair("Esc", "Clear"));

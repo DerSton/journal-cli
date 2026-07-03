@@ -222,11 +222,10 @@ fn draw_chart(f: &mut Frame, app: &App, area: Rect) {
         .take(7)
         .rev()
         .map(|entry| {
-            let label = entry
-                .timestamp
-                .with_timezone(&chrono::Local)
-                .format("%d.%m.")
-                .to_string();
+            let date = entry
+                .date_for
+                .unwrap_or_else(|| entry.timestamp.with_timezone(&chrono::Local).date_naive());
+            let label = date.format("%d.%m.").to_string();
             let words = entry.content.split_whitespace().count() as u64;
             (label, words)
         })
@@ -301,7 +300,10 @@ pub(crate) fn calculate_streaks(entries: &[crate::model::JournalEntry]) -> (u32,
 
     let mut dates: Vec<NaiveDate> = entries
         .iter()
-        .map(|e| e.timestamp.with_timezone(&chrono::Local).date_naive())
+        .map(|e| {
+            e.date_for
+                .unwrap_or_else(|| e.timestamp.with_timezone(&chrono::Local).date_naive())
+        })
         .collect();
     dates.sort_unstable();
     dates.dedup();

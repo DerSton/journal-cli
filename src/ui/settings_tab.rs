@@ -6,7 +6,9 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     text::{Line, Span},
-    widgets::{List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{
+        List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap,
+    },
 };
 
 pub fn draw(f: &mut Frame, app: &mut App, list_area: Rect, content_area: Rect) {
@@ -170,7 +172,7 @@ fn draw_recovery_panel(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let hint = if app.settings_panel_focused {
-        "Tab  Switch N/T    ←/→  Adjust    Ctrl+S  Generate shares    Esc  Back"
+        "Tab  Switch N/T    ←/→  Adjust    Ctrl+S  Generate    Ctrl+E  Export    Esc  Back"
     } else {
         "Press  Enter  to open"
     };
@@ -215,5 +217,31 @@ fn draw_recovery_panel(f: &mut Frame, app: &App, area: Rect) {
         }
     }
 
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+    let total_lines = lines.len();
+    let scrollbar_needed = total_lines > area.height as usize;
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .scroll((app.detail_scroll, 0)),
+        area,
+    );
+
+    if scrollbar_needed {
+        let visible = area.height as usize;
+        let mut sb_state = ScrollbarState::default()
+            .content_length(total_lines.saturating_sub(visible))
+            .position(app.detail_scroll as usize);
+        f.render_stateful_widget(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼")),
+            area.inner(Margin {
+                horizontal: 0,
+                vertical: 0,
+            }),
+            &mut sb_state,
+        );
+    }
 }

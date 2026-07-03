@@ -99,6 +99,11 @@ pub enum AppMode {
         /// The currently highlighted index in the attachment list.
         selected_attachment_index: usize,
     },
+    /// Confirmation dialog before discarding unsaved changes.
+    DiscardConfirm {
+        /// Whether we were editing an existing item (true) or creating a new one (false).
+        is_edit: bool,
+    },
 }
 
 /// The global application state container.
@@ -348,6 +353,32 @@ impl App {
                 .contacts
                 .iter()
                 .position(|c| c.id == selected.id)
+        }
+    }
+
+    /// Checks if the editor in the current active tab has any unsaved modifications.
+    pub fn is_dirty(&self) -> bool {
+        match self.mode {
+            AppMode::Writing { is_edit } => match self.active_tab {
+                Tab::Journal => {
+                    if is_edit {
+                        if let Some(real_idx) = self.selected_entry_idx() {
+                            let entry = &self.journal.entries[real_idx];
+                            entry.content != self.textarea.lines().join("\n")
+                                || entry.date_for != self.entry_date_for
+                        } else {
+                            true
+                        }
+                    } else {
+                        !self.textarea.lines().join("\n").trim().is_empty()
+                            || self.entry_date_for.is_some()
+                    }
+                }
+                Tab::Contacts => self.is_contact_form_dirty(is_edit),
+                Tab::Groups => self.is_group_form_dirty(is_edit),
+                _ => false,
+            },
+            _ => false,
         }
     }
 
