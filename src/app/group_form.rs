@@ -275,9 +275,7 @@ impl App {
     }
 
     pub fn sort_groups(&mut self) {
-        self.journal
-            .groups
-            .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        self.journal.groups.sort_by_key(|g| g.name.to_lowercase());
     }
 
     pub fn get_mentions_for_group(&self, group_id: &str) -> Vec<&crate::model::JournalEntry> {

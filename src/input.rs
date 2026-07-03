@@ -963,45 +963,37 @@ fn handle_attachment_picker(app: &mut App, key: KeyEvent, selected_attachment_in
                 selected_attachment_index: next_idx,
             };
         }
-        KeyCode::Up | KeyCode::Char('k') => {
-            if num_attachments > 0 {
-                let next = if selected_attachment_index > 0 {
-                    selected_attachment_index - 1
-                } else {
-                    num_attachments - 1
-                };
-                app.mode = AppMode::AttachmentPicker {
-                    selected_attachment_index: next,
-                };
-            }
+        KeyCode::Up | KeyCode::Char('k') if num_attachments > 0 => {
+            let next = if selected_attachment_index > 0 {
+                selected_attachment_index - 1
+            } else {
+                num_attachments - 1
+            };
+            app.mode = AppMode::AttachmentPicker {
+                selected_attachment_index: next,
+            };
         }
-        KeyCode::Down | KeyCode::Char('j') => {
-            if num_attachments > 0 {
-                let next = (selected_attachment_index + 1) % num_attachments;
-                app.mode = AppMode::AttachmentPicker {
-                    selected_attachment_index: next,
-                };
-            }
+        KeyCode::Down | KeyCode::Char('j') if num_attachments > 0 => {
+            let next = (selected_attachment_index + 1) % num_attachments;
+            app.mode = AppMode::AttachmentPicker {
+                selected_attachment_index: next,
+            };
         }
-        KeyCode::Char('s') | KeyCode::Char('e') | KeyCode::Enter => {
-            if num_attachments > 0 {
-                app.status_msg = None;
-                app.error_msg = None;
-                app.export_attachment(selected_attachment_index);
-            }
+        KeyCode::Char('s') | KeyCode::Char('e') | KeyCode::Enter if num_attachments > 0 => {
+            app.status_msg = None;
+            app.error_msg = None;
+            app.export_attachment(selected_attachment_index);
         }
-        KeyCode::Char('d') | KeyCode::Delete => {
-            if num_attachments > 0 {
-                app.status_msg = None;
-                app.error_msg = None;
-                app.delete_attachment(selected_attachment_index);
-                // After deletion, we stay in picker mode (with empty state if 0)
-                let num_left = app.journal.entries[real_idx].attachments.len();
-                let next_idx = selected_attachment_index.min(num_left.saturating_sub(1));
-                app.mode = AppMode::AttachmentPicker {
-                    selected_attachment_index: next_idx,
-                };
-            }
+        KeyCode::Char('d') | KeyCode::Delete if num_attachments > 0 => {
+            app.status_msg = None;
+            app.error_msg = None;
+            app.delete_attachment(selected_attachment_index);
+            // After deletion, we stay in picker mode (with empty state if 0)
+            let num_left = app.journal.entries[real_idx].attachments.len();
+            let next_idx = selected_attachment_index.min(num_left.saturating_sub(1));
+            app.mode = AppMode::AttachmentPicker {
+                selected_attachment_index: next_idx,
+            };
         }
         _ => {}
     }
