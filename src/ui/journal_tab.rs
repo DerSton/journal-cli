@@ -166,7 +166,11 @@ fn draw_preview(f: &mut Frame, app: &mut App, area: Rect) {
     lines.push(Line::from(""));
 
     for line in entry.content.lines() {
-        lines.push(render_mentions(line, &app.journal.contacts));
+        lines.push(render_mentions(
+            line,
+            &app.journal.contacts,
+            &app.journal.groups,
+        ));
     }
 
     let total_lines = lines.len();
@@ -217,33 +221,49 @@ fn first_line_truncated(text: &str, max_chars: usize) -> String {
 }
 
 /// Resolves `{{person|id}}` mention tags into highlighted contact names.
-pub fn render_mentions<'a>(line: &'a str, contacts: &[Contact]) -> Line<'a> {
-    const TAG_PREFIX: &str = "{{person|";
-    const TAG_PREFIX_LEN: usize = TAG_PREFIX.len();
-
+pub fn render_mentions<'a>(
+    line: &'a str,
+    contacts: &[Contact],
+    groups: &[crate::model::Group],
+) -> Line<'a> {
     let mut spans: Vec<Span<'a>> = Vec::new();
     let mut rest = line;
 
-    while let Some(start) = rest.find(TAG_PREFIX) {
+    while let Some(start) = rest.find("{{") {
         // Push plain text before the tag.
         if start > 0 {
             spans.push(Span::styled(&rest[..start], theme::text()));
         }
 
-        let after_prefix = &rest[start + TAG_PREFIX_LEN..];
-        if let Some(end) = after_prefix.find("}}") {
-            let id = &after_prefix[..end];
-            if let Some(contact) = contacts.iter().find(|c| c.id == id) {
-                spans.push(Span::styled(
-                    contact.full_name(),
-                    theme::mention().add_modifier(Modifier::UNDERLINED),
-                ));
+        let after_brace = &rest[start + 2..];
+        if let Some(end) = after_brace.find("}}") {
+            let tag_content = &after_brace[..end];
+            if let Some(id) = tag_content.strip_prefix("person|") {
+                if let Some(contact) = contacts.iter().find(|c| c.id == id) {
+                    spans.push(Span::styled(
+                        contact.full_name(),
+                        theme::mention().add_modifier(Modifier::UNDERLINED),
+                    ));
+                } else {
+                    let raw_len = 2 + end + 2;
+                    spans.push(Span::styled(&rest[start..start + raw_len], theme::muted()));
+                }
+            } else if let Some(id) = tag_content.strip_prefix("group|") {
+                if let Some(group) = groups.iter().find(|g| g.id == id) {
+                    spans.push(Span::styled(
+                        format!("👥 {}", group.name),
+                        theme::mention().add_modifier(Modifier::UNDERLINED),
+                    ));
+                } else {
+                    let raw_len = 2 + end + 2;
+                    spans.push(Span::styled(&rest[start..start + raw_len], theme::muted()));
+                }
             } else {
-                // Unknown id — render the raw tag.
-                let raw_len = TAG_PREFIX_LEN + end + 2;
-                spans.push(Span::styled(&rest[start..start + raw_len], theme::muted()));
+                // Not a known tag type, render as normal text
+                let raw_len = 2 + end + 2;
+                spans.push(Span::styled(&rest[start..start + raw_len], theme::text()));
             }
-            rest = &rest[start + TAG_PREFIX_LEN + end + 2..];
+            rest = &after_brace[end + 2..];
         } else {
             // Malformed tag — emit the remainder as plain text.
             spans.push(Span::styled(rest, theme::text()));

@@ -33,6 +33,11 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             field_index,
             current_date,
         } => handle_date_picker(app, key, is_edit, field_index, current_date),
+        AppMode::GroupMemberPicker {
+            is_edit,
+            selected_contact_index,
+            search_query,
+        } => handle_group_member_picker(app, key, is_edit, selected_contact_index, &search_query),
         AppMode::DeleteConfirm => handle_delete_confirm(app, key),
         AppMode::Login => handle_login(app, key),
         AppMode::Recovery => handle_recovery(app, key),
@@ -54,8 +59,9 @@ fn handle_list(app: &mut App, key: KeyEvent) {
         KeyCode::Char('q') => app.should_quit = true,
         KeyCode::Char('1') => app.switch_tab(Tab::Journal),
         KeyCode::Char('2') => app.switch_tab(Tab::Contacts),
-        KeyCode::Char('3') => app.switch_tab(Tab::Stats),
-        KeyCode::Char('4') => app.switch_tab(Tab::Settings),
+        KeyCode::Char('3') => app.switch_tab(Tab::Groups),
+        KeyCode::Char('4') => app.switch_tab(Tab::Stats),
+        KeyCode::Char('5') => app.switch_tab(Tab::Settings),
         KeyCode::Up | KeyCode::Char('k') => {
             if app.selected_index > 0 {
                 app.selected_index -= 1;
@@ -76,6 +82,7 @@ fn handle_list(app: &mut App, key: KeyEvent) {
         _ => match app.active_tab {
             Tab::Journal => handle_journal_list(app, key),
             Tab::Contacts => handle_contacts_list(app, key),
+            Tab::Groups => handle_groups_list(app, key),
             Tab::Settings => handle_settings_list(app, key),
             Tab::Stats => handle_stats_list(app, key),
         },
@@ -163,6 +170,38 @@ fn handle_contacts_list(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('d') | KeyCode::Delete => {
             if !app.journal.contacts.is_empty() {
+                app.mode = AppMode::DeleteConfirm;
+                app.status_msg = None;
+                app.error_msg = None;
+            }
+        }
+        KeyCode::Esc => {
+            app.should_quit = true;
+        }
+        _ => {}
+    }
+}
+
+fn handle_groups_list(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('/') => {
+            app.mode = AppMode::Search;
+            app.selected_index = 0;
+        }
+        KeyCode::Char('n') => {
+            app.status_msg = None;
+            app.error_msg = None;
+            app.init_group_form(false);
+        }
+        KeyCode::Char('e') => {
+            app.status_msg = None;
+            app.error_msg = None;
+            if !app.journal.groups.is_empty() {
+                app.init_group_form(true);
+            }
+        }
+        KeyCode::Char('d') | KeyCode::Delete => {
+            if !app.journal.groups.is_empty() {
                 app.mode = AppMode::DeleteConfirm;
                 app.status_msg = None;
                 app.error_msg = None;
@@ -333,6 +372,7 @@ fn handle_writing(app: &mut App, key: KeyEvent, is_edit: bool) {
             }
         }
         Tab::Contacts => handle_contact_form(app, key, is_edit),
+        Tab::Groups => handle_group_form(app, key, is_edit),
         Tab::Settings | Tab::Stats => {}
     }
 }
@@ -383,20 +423,121 @@ fn handle_contact_form(app: &mut App, key: KeyEvent, is_edit: bool) {
     }
 }
 
-fn picker_filtered_contacts<'a>(
-    contacts: &'a [crate::model::Contact],
-    query: &str,
-) -> Vec<&'a crate::model::Contact> {
-    if query.trim().is_empty() {
+fn handle_group_form(app: &mut App, key: KeyEvent, is_edit: bool) {
+    if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.save_group();
+        return;
+    }
+    if key.code == KeyCode::Esc {
+        app.mode = AppMode::List;
+        return;
+    }
+
+    let active_field = app.group_form.field_at(app.group_form.active_field);
+    if key.code == KeyCode::Enter && active_field == crate::app::GroupField::Members {
+        app.mode = AppMode::GroupMemberPicker {
+            is_edit,
+            selected_contact_index: 0,
+            search_query: String::new(),
+        };
+        return;
+    }
+
+    if key.code == KeyCode::Tab || key.code == KeyCode::Down {
+        app.group_form.focus_next();
+    } else if key.code == KeyCode::BackTab || key.code == KeyCode::Up {
+        app.group_form.focus_prev();
+    } else {
+        app.group_form.handle_key(key);
+    }
+}
+
+fn handle_group_member_picker(
+    app: &mut App,
+    key: KeyEvent,
+    is_edit: bool,
+    selected_contact_index: usize,
+    search_query: &str,
+) {
+    let contacts = &app.journal.contacts;
+    let filtered: Vec<&crate::model::Contact> = if search_query.is_empty() {
         contacts.iter().collect()
     } else {
-        let q = query.to_lowercase();
+        let q = search_query.to_lowercase();
         contacts
             .iter()
             .filter(|c| {
                 c.full_name().to_lowercase().contains(&q) || c.nickname.to_lowercase().contains(&q)
             })
             .collect()
+    };
+    let len = filtered.len();
+
+    match key.code {
+        KeyCode::Esc => {
+            app.mode = AppMode::Writing { is_edit };
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if len > 0 {
+                let next = if selected_contact_index > 0 {
+                    selected_contact_index - 1
+                } else {
+                    len - 1
+                };
+                app.mode = AppMode::GroupMemberPicker {
+                    is_edit,
+                    selected_contact_index: next,
+                    search_query: search_query.to_string(),
+                };
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if len > 0 {
+                let next = (selected_contact_index + 1) % len;
+                app.mode = AppMode::GroupMemberPicker {
+                    is_edit,
+                    selected_contact_index: next,
+                    search_query: search_query.to_string(),
+                };
+            }
+        }
+        KeyCode::Char(' ') | KeyCode::Enter => {
+            if len > 0 && selected_contact_index < len {
+                let contact = filtered[selected_contact_index];
+                let id = contact.id.clone();
+                if app.group_form.selected_member_ids.contains(&id) {
+                    app.group_form.selected_member_ids.remove(&id);
+                } else {
+                    app.group_form.selected_member_ids.insert(id);
+                }
+                app.mode = AppMode::GroupMemberPicker {
+                    is_edit,
+                    selected_contact_index,
+                    search_query: search_query.to_string(),
+                };
+            }
+        }
+        KeyCode::Backspace => {
+            let mut q = search_query.to_string();
+            if !q.is_empty() {
+                q.pop();
+                app.mode = AppMode::GroupMemberPicker {
+                    is_edit,
+                    selected_contact_index: 0,
+                    search_query: q,
+                };
+            }
+        }
+        KeyCode::Char(c) => {
+            let mut q = search_query.to_string();
+            q.push(c);
+            app.mode = AppMode::GroupMemberPicker {
+                is_edit,
+                selected_contact_index: 0,
+                search_query: q,
+            };
+        }
+        _ => {}
     }
 }
 
@@ -407,8 +548,8 @@ fn handle_contact_picker(
     selected_contact_index: usize,
     search_query: &str,
 ) {
-    let filtered = picker_filtered_contacts(&app.journal.contacts, search_query);
-    let len = filtered.len();
+    let items = app.get_picker_items(search_query);
+    let len = items.len();
 
     match key.code {
         KeyCode::Esc => {
@@ -440,13 +581,12 @@ fn handle_contact_picker(
         }
         KeyCode::Enter => {
             if len > 0 && selected_contact_index < len {
-                let contact = filtered[selected_contact_index];
+                let item = &items[selected_contact_index];
                 // Overwrite the '@' character we inserted
                 let backspace = KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty());
                 app.textarea.input(backspace);
 
-                let tag = contact.mention_tag();
-                app.textarea.insert_str(tag);
+                app.textarea.insert_str(&item.tag);
             }
             app.mode = AppMode::Writing { is_edit };
         }
@@ -555,6 +695,7 @@ fn handle_delete_confirm(app: &mut App, key: KeyEvent) {
         KeyCode::Char('y') | KeyCode::Char('Y') => match app.active_tab {
             Tab::Journal => app.delete_selected_entry(),
             Tab::Contacts => app.delete_selected_contact(),
+            Tab::Groups => app.delete_selected_group(),
             Tab::Settings | Tab::Stats => {}
         },
         KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => app.mode = AppMode::List,
@@ -574,6 +715,7 @@ fn handle_login(app: &mut App, key: KeyEvent) {
                     app.mode = AppMode::List;
                     app.sort_entries();
                     app.sort_contacts();
+                    app.sort_groups();
                     app.status_msg = Some("Journal unlocked".to_string());
                 }
                 Err(e) => {

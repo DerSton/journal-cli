@@ -12,11 +12,19 @@ use ratatui::{
 };
 use ratatui_textarea::TextArea;
 
-pub fn draw(f: &mut Frame, app: &mut App, list_area: Rect, content_area: Rect) {
+pub fn draw_contacts(f: &mut Frame, app: &mut App, list_area: Rect, content_area: Rect) {
     draw_list(f, app, list_area);
     match app.mode {
         AppMode::Writing { is_edit } => draw_form(f, app, content_area, is_edit),
         _ => draw_profile(f, app, content_area),
+    }
+}
+
+pub fn draw_groups(f: &mut Frame, app: &mut App, list_area: Rect, content_area: Rect) {
+    draw_group_list(f, app, list_area);
+    match app.mode {
+        AppMode::Writing { is_edit } => draw_group_form(f, app, content_area, is_edit),
+        _ => draw_group_profile(f, app, content_area),
     }
 }
 
@@ -66,11 +74,7 @@ fn draw_list(f: &mut Frame, app: &App, area: Rect) {
     let title = if count == 0 {
         "People".to_string()
     } else {
-        format!(
-            "People  {} contact{}",
-            count,
-            if count == 1 { "" } else { "s" }
-        )
+        format!("People  {}", count)
     };
 
     let mut state = ListState::default();
@@ -443,5 +447,352 @@ fn render_field(f: &mut Frame, app: &mut App, field: ContactField, area: Rect, f
         ContactField::HairColor => render_text(f, area, label, focused, &mut form.hair_color),
         ContactField::Height => render_text(f, area, label, focused, &mut form.height),
         ContactField::Notes => render_text(f, area, label, focused, &mut form.notes),
+    }
+}
+
+// ── Group UI Rendering ────────────────────────────────────────────────────────
+
+fn draw_group_list(f: &mut Frame, app: &App, area: Rect) {
+    let filtered = app.filtered_groups();
+    let count = filtered.len();
+
+    let items: Vec<ListItem> = filtered
+        .iter()
+        .enumerate()
+        .map(|(i, g)| {
+            let selected = i == app.selected_index;
+            let name_style = if selected {
+                theme::accent()
+            } else {
+                theme::text()
+            };
+            let meta_style = if selected {
+                theme::muted()
+            } else {
+                theme::dim()
+            };
+
+            // Build a subtitle with date range or member count.
+            let mut subtitle = format!(
+                "  {} member{}",
+                g.member_ids.len(),
+                if g.member_ids.len() == 1 { "" } else { "s" }
+            );
+            if let Some(start) = g.start_date {
+                subtitle = format!("  {} · {}", subtitle, start.format("%Y-%m-%d"));
+                if let Some(end) = g.end_date {
+                    subtitle = format!("{}-{}", subtitle, end.format("%Y-%m-%d"));
+                }
+            }
+
+            let mut item_lines = vec![Line::from(Span::styled(format!(" {}", g.name), name_style))];
+            item_lines.push(Line::from(Span::styled(subtitle, meta_style)));
+            item_lines.push(Line::from(""));
+            ListItem::new(item_lines)
+        })
+        .collect();
+
+    let title = if count == 0 {
+        "Groups".to_string()
+    } else {
+        format!("Groups  {}", count)
+    };
+
+    let mut state = ListState::default();
+    if !filtered.is_empty() {
+        state.select(Some(app.selected_index));
+    }
+
+    f.render_stateful_widget(
+        List::new(items)
+            .block(theme::panel(title))
+            .highlight_style(theme::list_highlight()),
+        area,
+        &mut state,
+    );
+}
+
+fn draw_group_profile(f: &mut Frame, app: &App, area: Rect) {
+    let filtered = app.filtered_groups();
+
+    if filtered.is_empty() {
+        let msg = if !app.search_query.is_empty() {
+            "No groups match the current search."
+        } else {
+            "No groups yet.  Press  n  to add the first one."
+        };
+        f.render_widget(
+            Paragraph::new(vec![
+                Line::from(""),
+                Line::from(""),
+                Line::from(Span::styled(msg, theme::muted())).alignment(Alignment::Center),
+            ])
+            .block(theme::panel("Group Profile")),
+            area,
+        );
+        return;
+    }
+
+    let group = filtered[app.selected_index];
+
+    // Split into profile card (top 60 %) and mentions panel (bottom 40 %).
+    let [card_area, mentions_area] = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .areas(area);
+
+    draw_group_profile_card(f, app, group, card_area);
+    draw_group_mentions_panel(f, app, group, mentions_area);
+}
+
+fn draw_group_profile_card(f: &mut Frame, app: &App, g: &crate::model::Group, area: Rect) {
+    let mut lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            format!("  {}", g.name),
+            theme::text().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            format!("  {}", "─".repeat((area.width as usize).saturating_sub(4))),
+            theme::dim(),
+        )),
+        Line::from(""),
+    ];
+
+    let mut row = |label: &str, value: &str| {
+        if !value.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {:<14}", label), theme::label()),
+                Span::styled(value.to_string(), theme::text()),
+            ]));
+        }
+    };
+
+    if let Some(start) = g.start_date {
+        let mut range = crate::app::format_localized_date(start);
+        if let Some(end) = g.end_date {
+            range = format!("{} to {}", range, crate::app::format_localized_date(end));
+        }
+        row("Active Period", &range);
+    } else if let Some(end) = g.end_date {
+        row("Until Date", &crate::app::format_localized_date(end));
+    }
+
+    // Resolve member names from contacts
+    let mut member_names = Vec::new();
+    for member_id in &g.member_ids {
+        if let Some(c) = app.journal.contacts.iter().find(|c| &c.id == member_id) {
+            member_names.push(c.display_name());
+        }
+    }
+    member_names.sort();
+
+    if !member_names.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("  Members", theme::label())));
+        for name in member_names {
+            lines.push(Line::from(Span::styled(
+                format!("    {}", name),
+                theme::text(),
+            )));
+        }
+    }
+
+    if !g.description.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("  Description", theme::label())));
+        for desc_line in g.description.lines() {
+            lines.push(Line::from(Span::styled(
+                format!("    {}", desc_line),
+                theme::text(),
+            )));
+        }
+    }
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(theme::panel("Group Profile"))
+            .wrap(Wrap { trim: false }),
+        area,
+    );
+}
+
+fn draw_group_mentions_panel(f: &mut Frame, app: &App, group: &crate::model::Group, area: Rect) {
+    let mentions = app.get_mentions_for_group(&group.id);
+    let block = theme::panel("Journal mentions");
+
+    if mentions.is_empty() {
+        f.render_widget(
+            Paragraph::new(vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    format!("No mentions of {} yet", group.name),
+                    theme::muted(),
+                ))
+                .alignment(Alignment::Center),
+            ])
+            .block(block),
+            area,
+        );
+        return;
+    }
+
+    let items: Vec<ListItem> = mentions
+        .iter()
+        .map(|entry| {
+            let date = app.journal.format_date_short(&entry.timestamp);
+            let snippet: String = entry
+                .content
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("")
+                .trim()
+                .chars()
+                .take(50)
+                .collect();
+            let snippet = if snippet.len() >= 50 {
+                format!("{}…", snippet.trim_end())
+            } else {
+                snippet
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(format!(" {} ", date), theme::label()),
+                Span::styled(snippet, theme::text()),
+            ]))
+        })
+        .collect();
+
+    f.render_widget(List::new(items).block(block), area);
+}
+
+fn group_field_height(field: &crate::app::GroupField) -> u16 {
+    match field {
+        crate::app::GroupField::Description => 5,
+        _ => 3,
+    }
+}
+
+fn group_field_label(field: crate::app::GroupField) -> String {
+    match field {
+        crate::app::GroupField::Name => "Name".into(),
+        crate::app::GroupField::Description => "Description".into(),
+        crate::app::GroupField::StartDate => "Start Date".into(),
+        crate::app::GroupField::EndDate => "End Date".into(),
+        crate::app::GroupField::Members => "Members".into(),
+    }
+}
+
+fn draw_group_form(f: &mut Frame, app: &mut App, area: Rect, is_edit: bool) {
+    let title = if is_edit { "Edit Group" } else { "New Group" };
+    f.render_widget(theme::field(title, true), area);
+
+    let inner = area.inner(Margin {
+        horizontal: 2,
+        vertical: 1,
+    });
+
+    let contacts = app.journal.contacts.clone();
+    let fields = app.group_form.field_order();
+    let heights: Vec<u16> = fields.iter().map(group_field_height).collect();
+    let total: u16 = heights.iter().sum();
+    let viewport = inner.height;
+
+    // Keep focused field visible by adjusting the scroll offset.
+    let mut focus_top = 0u16;
+    let mut focus_bottom = 0u16;
+    let mut cursor = 0u16;
+    for (i, &h) in heights.iter().enumerate() {
+        if i == app.group_form.active_field {
+            focus_top = cursor;
+            focus_bottom = cursor + h;
+        }
+        cursor += h;
+    }
+    if focus_top < app.group_form.scroll {
+        app.group_form.scroll = focus_top;
+    } else if focus_bottom > app.group_form.scroll + viewport {
+        app.group_form.scroll =
+            group_field_scroll_limit(focus_bottom.saturating_sub(viewport), app, &contacts);
+    }
+    app.group_form.scroll = app.group_form.scroll.min(total.saturating_sub(viewport));
+
+    let scroll = app.group_form.scroll;
+    let mut cursor = 0u16;
+
+    for (i, field) in fields.iter().enumerate() {
+        let h = heights[i];
+        let field_top = cursor;
+        let field_bottom = cursor + h;
+        cursor += h;
+
+        let vis_top = field_top.max(scroll);
+        let vis_bottom = field_bottom.min(scroll + viewport);
+        if vis_bottom <= vis_top {
+            continue;
+        }
+
+        let rect = Rect {
+            x: inner.x,
+            y: inner.y + (vis_top - scroll),
+            width: inner.width,
+            height: vis_bottom - vis_top,
+        };
+        render_group_field(
+            f,
+            app,
+            *field,
+            &contacts,
+            rect,
+            i == app.group_form.active_field,
+        );
+    }
+}
+
+fn group_field_scroll_limit(val: u16, _app: &App, _contacts: &[Contact]) -> u16 {
+    val
+}
+
+fn render_group_field(
+    f: &mut Frame,
+    app: &mut App,
+    field: crate::app::GroupField,
+    contacts: &[Contact],
+    area: Rect,
+    focused: bool,
+) {
+    let label = group_field_label(field);
+    let form = &mut app.group_form;
+    match field {
+        crate::app::GroupField::Name => render_text(f, area, label, focused, &mut form.name),
+        crate::app::GroupField::Description => {
+            render_text(f, area, label, focused, &mut form.description)
+        }
+        crate::app::GroupField::StartDate => {
+            render_text(f, area, label, focused, &mut form.start_date)
+        }
+        crate::app::GroupField::EndDate => render_text(f, area, label, focused, &mut form.end_date),
+        crate::app::GroupField::Members => {
+            let mut names: Vec<String> = contacts
+                .iter()
+                .filter(|c| form.selected_member_ids.contains(&c.id))
+                .map(|c| c.display_name())
+                .collect();
+            names.sort();
+            let text_value = if names.is_empty() {
+                "None".to_string()
+            } else {
+                names.join(", ")
+            };
+            let text_style = if names.is_empty() {
+                theme::muted()
+            } else {
+                theme::accent()
+            };
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(text_value, text_style)))
+                    .block(theme::field(label, focused)),
+                area,
+            );
+        }
     }
 }

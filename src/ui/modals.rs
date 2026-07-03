@@ -27,6 +27,11 @@ pub fn draw_overlays(f: &mut Frame, app: &App) {
             current_date,
             ..
         } => draw_date_picker(f, app, field_index, current_date),
+        AppMode::GroupMemberPicker {
+            selected_contact_index,
+            ref search_query,
+            ..
+        } => draw_group_member_picker(f, app, selected_contact_index, search_query),
         AppMode::AttachmentPicker {
             selected_attachment_index,
         } => draw_attachment_picker(f, app, selected_attachment_index),
@@ -43,6 +48,7 @@ fn draw_delete_confirm(f: &mut Frame, app: &App) {
     let item_label = match app.active_tab {
         Tab::Journal => "journal entry",
         Tab::Contacts => "contact",
+        Tab::Groups => "group",
         Tab::Settings | Tab::Stats => return,
     };
 
@@ -75,29 +81,12 @@ fn draw_delete_confirm(f: &mut Frame, app: &App) {
 
 // ── Contact picker ────────────────────────────────────────────────────────────
 
-fn picker_filtered_contacts<'a>(
-    contacts: &'a [crate::model::Contact],
-    query: &str,
-) -> Vec<&'a crate::model::Contact> {
-    if query.trim().is_empty() {
-        contacts.iter().collect()
-    } else {
-        let q = query.to_lowercase();
-        contacts
-            .iter()
-            .filter(|c| {
-                c.full_name().to_lowercase().contains(&q) || c.nickname.to_lowercase().contains(&q)
-            })
-            .collect()
-    }
-}
-
 fn draw_contact_picker(f: &mut Frame, app: &App, selected: usize, search_query: &str) {
     let area = centered_rect(60, 56, f.area());
     f.render_widget(Clear, area);
 
     // Render outer block for the modal
-    let block = theme::modal("  Mention a person  ");
+    let block = theme::modal("  Mention  ");
     let inner_area = block.inner(area);
     f.render_widget(block, area);
 
@@ -109,21 +98,19 @@ fn draw_contact_picker(f: &mut Frame, app: &App, selected: usize, search_query: 
     // Search query box
     let display_query = format!(" {}", search_query);
     f.render_widget(
-        Paragraph::new(Line::from(Span::styled(display_query, theme::text()))).block(theme::field(
-            "Search (Type to filter · Backspace to delete/close)",
-            true,
-        )),
+        Paragraph::new(Line::from(Span::styled(display_query, theme::text())))
+            .block(theme::field("Search", true)),
         search_area,
     );
 
-    // Filter contacts based on query
-    let filtered = picker_filtered_contacts(&app.journal.contacts, search_query);
+    // Filter items based on query
+    let filtered = app.get_picker_items(search_query);
 
     let items: Vec<ListItem> = filtered
         .iter()
-        .map(|c| {
+        .map(|item| {
             ListItem::new(Line::from(Span::styled(
-                format!("  {}", c.full_name()),
+                format!("  {}", item.name),
                 theme::text(),
             )))
         })
@@ -136,7 +123,74 @@ fn draw_contact_picker(f: &mut Frame, app: &App, selected: usize, search_query: 
 
     f.render_stateful_widget(
         List::new(items)
-            .block(theme::panel("Select Person"))
+            .block(theme::panel("Select"))
+            .highlight_style(theme::list_highlight()),
+        list_area,
+        &mut state,
+    );
+}
+
+fn draw_group_member_picker(f: &mut Frame, app: &App, selected: usize, search_query: &str) {
+    let area = centered_rect(60, 56, f.area());
+    f.render_widget(Clear, area);
+
+    // Render outer block for the modal
+    let block = theme::modal("  Members  ");
+    let inner_area = block.inner(area);
+    f.render_widget(block, area);
+
+    let [search_area, list_area] = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .areas(inner_area);
+
+    // Search query box
+    let display_query = format!(" {}", search_query);
+    f.render_widget(
+        Paragraph::new(Line::from(Span::styled(display_query, theme::text())))
+            .block(theme::field("Search", true)),
+        search_area,
+    );
+
+    // Filter contacts based on query
+    let contacts = &app.journal.contacts;
+    let filtered: Vec<&crate::model::Contact> = if search_query.is_empty() {
+        contacts.iter().collect()
+    } else {
+        let q = search_query.to_lowercase();
+        contacts
+            .iter()
+            .filter(|c| {
+                c.full_name().to_lowercase().contains(&q) || c.nickname.to_lowercase().contains(&q)
+            })
+            .collect()
+    };
+
+    let items: Vec<ListItem> = filtered
+        .iter()
+        .map(|c| {
+            let is_checked = app.group_form.selected_member_ids.contains(&c.id);
+            let indicator = if is_checked { "[x] " } else { "[ ] " };
+            let style = if is_checked {
+                theme::accent()
+            } else {
+                theme::text()
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(indicator, style),
+                Span::styled(c.full_name(), style),
+            ]))
+        })
+        .collect();
+
+    let mut state = ListState::default();
+    if !filtered.is_empty() {
+        state.select(Some(selected));
+    }
+
+    f.render_stateful_widget(
+        List::new(items)
+            .block(theme::panel("People"))
             .highlight_style(theme::list_highlight()),
         list_area,
         &mut state,

@@ -4,7 +4,7 @@
 //! and localized timestamp formatting.
 
 use crate::crypto::{self, NONCE_SIZE, SALT_SIZE};
-use crate::model::{Contact, JournalEntry, Settings};
+use crate::model::{Contact, Group, JournalEntry, Settings};
 use rand::random;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -21,6 +21,9 @@ pub struct Journal {
     /// List of contacts/people mentioned in entries.
     #[serde(default)]
     pub contacts: Vec<Contact>,
+    /// List of groups.
+    #[serde(default)]
+    pub groups: Vec<Group>,
     /// User settings.
     #[serde(default)]
     pub settings: Settings,
