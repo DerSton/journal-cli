@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
 // ── Login ─────────────────────────────────────────────────────────────────────
@@ -130,7 +130,29 @@ pub fn draw_recovery(f: &mut Frame, app: &mut App) {
             ]));
         }
     }
-    f.render_widget(Paragraph::new(share_lines), shares_area);
+
+    let total_lines = share_lines.len();
+    let scrollbar_needed = total_lines > shares_area.height as usize;
+
+    f.render_widget(
+        Paragraph::new(share_lines).scroll((app.detail_scroll, 0)),
+        shares_area,
+    );
+
+    if scrollbar_needed {
+        let visible = shares_area.height as usize;
+        let mut sb_state = ScrollbarState::default()
+            .content_length(total_lines.saturating_sub(visible))
+            .position(app.detail_scroll as usize);
+        f.render_stateful_widget(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼")),
+            shares_area,
+            &mut sb_state,
+        );
+    }
 
     // Footer: status/error + keybinds.
     let status_line = if let Some(ref msg) = app.recovery_status_msg {

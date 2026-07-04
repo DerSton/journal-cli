@@ -256,6 +256,108 @@ impl App {
             }
         }
     }
+
+    /// Exports the attachment at the specified index in the currently selected journal entry
+    /// to a file selected via a native save-file dialog.
+    pub fn export_attachment(&mut self, attachment_index: usize) {
+        let real_idx = match self.selected_entry_idx() {
+            Some(idx) => idx,
+            None => {
+                self.error_msg = Some("No entry selected".to_string());
+                return;
+            }
+        };
+
+        let attachment = match self.journal.entries[real_idx]
+            .attachments
+            .get(attachment_index)
+        {
+            Some(att) => att,
+            None => {
+                self.error_msg = Some("Attachment not found".to_string());
+                return;
+            }
+        };
+
+        let data = match base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &attachment.data,
+        ) {
+            Ok(d) => d,
+            Err(e) => {
+                self.error_msg = Some(format!("Failed to decode attachment: {}", e));
+                return;
+            }
+        };
+
+        let default_name = attachment.filename.clone();
+
+        // Suspend TUI for native dialog.
+        let _ = crossterm::terminal::disable_raw_mode();
+        let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen);
+
+        let dest = std::thread::spawn(move || {
+            rfd::FileDialog::new()
+                .set_title("Save attachment")
+                .set_file_name(&default_name)
+                .save_file()
+        })
+        .join()
+        .unwrap_or(None);
+
+        // Restore TUI.
+        let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen);
+        let _ = crossterm::terminal::enable_raw_mode();
+        self.redraw_requested = true;
+
+        let path = match dest {
+            Some(p) => p,
+            None => {
+                self.status_msg = Some("Export cancelled".to_string());
+                return;
+            }
+        };
+
+        match std::fs::write(&path, &data) {
+            Ok(_) => {
+                self.status_msg = Some(format!("Saved attachment to {}", path.display()));
+                self.error_msg = None;
+            }
+            Err(e) => {
+                self.error_msg = Some(format!("Failed to save attachment: {}", e));
+            }
+        }
+    }
+
+    /// Deletes the attachment at the specified index from the currently selected journal entry.
+    pub fn delete_attachment(&mut self, attachment_index: usize) {
+        let real_idx = match self.selected_entry_idx() {
+            Some(idx) => idx,
+            None => {
+                self.error_msg = Some("No entry selected".to_string());
+                return;
+            }
+        };
+
+        let attachments = &mut self.journal.entries[real_idx].attachments;
+        if attachment_index >= attachments.len() {
+            self.error_msg = Some("Attachment index out of bounds".to_string());
+            return;
+        }
+
+        let removed = attachments.remove(attachment_index);
+        let filename = removed.filename;
+
+        if let Err(e) = self.save_journal() {
+            self.error_msg = Some(format!(
+                "Failed to save journal after deleting attachment: {}",
+                e
+            ));
+        } else {
+            self.status_msg = Some(format!("Attachment '{}' deleted", filename));
+            self.error_msg = None;
+        }
+    }
 }
 
 /// Infers a MIME type from a file's extension.

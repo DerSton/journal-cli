@@ -50,10 +50,11 @@ fn draw_tab_bar(f: &mut Frame, app: &App, area: Rect) {
     let tabs = [
         ("  Journal ", Tab::Journal),
         ("  People  ", Tab::Contacts),
+        ("  Groups  ", Tab::Groups),
         ("  Insights", Tab::Stats),
         ("  Settings", Tab::Settings),
     ];
-    let hints = ["[1]", "[2]", "[3]", "[4]"];
+    let hints = ["[1]", "[2]", "[3]", "[4]", "[5]"];
 
     let mut spans: Vec<Span> = Vec::new();
 
@@ -91,7 +92,7 @@ fn draw_main(f: &mut Frame, app: &mut App, area: Rect) {
         Layout::horizontal([Constraint::Percentage(33), Constraint::Percentage(67)]).areas(area);
 
     // Search box consumes the top of the list panel when active.
-    let list_area = if matches!(app.active_tab, Tab::Journal | Tab::Contacts)
+    let list_area = if matches!(app.active_tab, Tab::Journal | Tab::Contacts | Tab::Groups)
         && (app.mode == AppMode::Search || !app.search_query.is_empty())
     {
         let [search_area, remainder] =
@@ -104,7 +105,8 @@ fn draw_main(f: &mut Frame, app: &mut App, area: Rect) {
 
     match app.active_tab {
         Tab::Journal => journal_tab::draw(f, app, list_area, content_area),
-        Tab::Contacts => contacts_tab::draw(f, app, list_area, content_area),
+        Tab::Contacts => contacts_tab::draw_contacts(f, app, list_area, content_area),
+        Tab::Groups => contacts_tab::draw_groups(f, app, list_area, content_area),
         Tab::Settings => settings_tab::draw(f, app, list_area, content_area),
         Tab::Stats => {} // handled above
     }
@@ -162,13 +164,19 @@ fn build_hint_spans(app: &App) -> Vec<Span<'static>> {
                         v.extend(hint_pair("n", "New entry"));
                         v.extend(hint_pair("e", "Edit"));
                         v.extend(hint_pair("d", "Delete"));
-                        v.extend(hint_pair("a", "Attach"));
+                        v.extend(hint_pair("a", "Attachments"));
                         v.extend(hint_pair("x", "Export .md"));
-                        v.extend(hint_pair("PgUp/Dn", "Scroll"));
+                        v.extend(hint_pair("PgUp", "Scroll"));
                     }
                     Tab::Contacts => {
                         v.extend(hint_pair("/", "Search"));
-                        v.extend(hint_pair("n", "New contact"));
+                        v.extend(hint_pair("n", "New"));
+                        v.extend(hint_pair("e", "Edit"));
+                        v.extend(hint_pair("d", "Delete"));
+                    }
+                    Tab::Groups => {
+                        v.extend(hint_pair("/", "Search"));
+                        v.extend(hint_pair("n", "New"));
                         v.extend(hint_pair("e", "Edit"));
                         v.extend(hint_pair("d", "Delete"));
                     }
@@ -188,8 +196,8 @@ fn build_hint_spans(app: &App) -> Vec<Span<'static>> {
                 v.extend(hint_pair("Ctrl+S", "Save"));
                 v.extend(hint_pair("Esc", "Cancel"));
             }
-            Tab::Contacts => {
-                v.extend(hint_pair("Tab/⇧Tab", "Next/prev field"));
+            Tab::Contacts | Tab::Groups => {
+                v.extend(hint_pair("Tab", "Next field"));
                 v.extend(hint_pair("Ctrl+S", "Save"));
                 v.extend(hint_pair("Esc", "Cancel"));
             }
@@ -197,24 +205,40 @@ fn build_hint_spans(app: &App) -> Vec<Span<'static>> {
         },
         AppMode::ContactPicker { .. } => {
             v.extend(hint_pair("↑↓", "Select"));
-            v.extend(hint_pair("Enter", "Insert mention"));
+            v.extend(hint_pair("Enter", "Insert"));
             v.extend(hint_pair("Esc", "Cancel"));
+        }
+        AppMode::GroupMemberPicker { .. } => {
+            v.extend(hint_pair("↑↓", "Select"));
+            v.extend(hint_pair("Space", "Toggle"));
+            v.extend(hint_pair("Esc", "Done"));
         }
         AppMode::DatePicker { .. } => {
             v.extend(hint_pair("←→↑↓", "Navigate"));
-            v.extend(hint_pair("PgUp/Dn", "Month"));
-            v.extend(hint_pair("{ }", "Year"));
+            v.extend(hint_pair("PgUp", "Month"));
+            v.extend(hint_pair("{", "Year"));
             v.extend(hint_pair("Enter", "Confirm"));
             v.extend(hint_pair("c", "Clear"));
             v.extend(hint_pair("Esc", "Cancel"));
         }
         AppMode::DeleteConfirm => {
-            v.extend(hint_pair("y", "Confirm delete"));
-            v.extend(hint_pair("n / Esc", "Cancel"));
+            v.extend(hint_pair("y", "Delete"));
+            v.extend(hint_pair("Esc", "Cancel"));
+        }
+        AppMode::DiscardConfirm { .. } => {
+            v.extend(hint_pair("y", "Discard"));
+            v.extend(hint_pair("Esc/n", "Cancel"));
         }
         AppMode::Search => {
             v.extend(hint_pair("Enter", "Lock filter"));
             v.extend(hint_pair("Esc", "Clear"));
+        }
+        AppMode::AttachmentPicker { .. } => {
+            v.extend(hint_pair("↑↓", "Select"));
+            v.extend(hint_pair("a", "Attach"));
+            v.extend(hint_pair("Enter/s", "Save"));
+            v.extend(hint_pair("d/Del", "Delete"));
+            v.extend(hint_pair("Esc", "Back"));
         }
         AppMode::Login | AppMode::Recovery | AppMode::RecoveryReset => {}
     }

@@ -2,10 +2,12 @@
 
 mod contact;
 mod entry;
+mod group;
 mod journal;
 mod settings;
 
 pub use contact::{BLOOD_TYPE_OPTIONS, Contact, MARITAL_STATUS_OPTIONS};
 pub use entry::{Attachment, JournalEntry};
+pub use group::Group;
 pub use journal::{Journal, get_system_locale};
 pub use settings::Settings;

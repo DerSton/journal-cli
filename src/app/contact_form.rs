@@ -504,4 +504,61 @@ impl App {
             .filter(|entry| entry.content.contains(&target))
             .collect()
     }
+
+    /// Checks if the contact form has any unsaved modifications.
+    pub fn is_contact_form_dirty(&self, is_edit: bool) -> bool {
+        let current = match self.contact_form.to_contact(String::new()) {
+            Ok(c) => c,
+            Err(_) => return true,
+        };
+        if is_edit {
+            if let Some(real_idx) = self.selected_contact_idx() {
+                let original = &self.journal.contacts[real_idx];
+                original.title != current.title
+                    || original.first_names != current.first_names
+                    || original.last_name != current.last_name
+                    || original.nickname != current.nickname
+                    || original.preferred_name != current.preferred_name
+                    || original.maiden_name != current.maiden_name
+                    || original.suffix != current.suffix
+                    || original.gender != current.gender
+                    || original.pronouns != current.pronouns
+                    || original.nationalities != current.nationalities
+                    || original.languages != current.languages
+                    || original.religion != current.religion
+                    || original.marital_status != current.marital_status
+                    || original.blood_type != current.blood_type
+                    || original.eye_color != current.eye_color
+                    || original.hair_color != current.hair_color
+                    || original.height != current.height
+                    || original.notes != current.notes
+                    || original.birthdate != current.birthdate
+                    || original.date_of_death != current.date_of_death
+            } else {
+                true
+            }
+        } else {
+            let default = Contact::default();
+            default.title != current.title
+                || default.first_names != current.first_names
+                || default.last_name != current.last_name
+                || default.nickname != current.nickname
+                || default.preferred_name != current.preferred_name
+                || default.maiden_name != current.maiden_name
+                || default.suffix != current.suffix
+                || default.gender != current.gender
+                || default.pronouns != current.pronouns
+                || default.nationalities != current.nationalities
+                || default.languages != current.languages
+                || default.religion != current.religion
+                || current.marital_status != "N/A"
+                || current.blood_type != "N/A"
+                || default.eye_color != current.eye_color
+                || default.hair_color != current.hair_color
+                || default.height != current.height
+                || default.notes != current.notes
+                || default.birthdate != current.birthdate
+                || default.date_of_death != current.date_of_death
+        }
+    }
 }

@@ -125,12 +125,13 @@ impl Contact {
     ///     first_names: vec!["John".to_string(), "Edward".to_string()],
     ///     last_name: "Doe".to_string(),
     ///     preferred_name: "Johnny".to_string(),
+    ///     nickname: "Jack".to_string(),
     ///     suffix: "Jr.".to_string(),
     ///     maiden_name: "Smith".to_string(),
     ///     ..Default::default()
     /// };
     ///
-    /// assert_eq!(contact.full_name(), "Dr. John Edward \"Johnny\" Doe Jr. (nee Smith)");
+    /// assert_eq!(contact.full_name(), "Dr. John Edward \"Johnny\" 'Jack' Doe Jr. (nee Smith)");
     /// ```
     pub fn full_name(&self) -> String {
         let mut parts = Vec::new();
@@ -145,6 +146,9 @@ impl Contact {
         if !self.preferred_name.is_empty() {
             parts.push(format!("\"{}\"", self.preferred_name));
         }
+        if !self.nickname.is_empty() {
+            parts.push(format!("'{}'", self.nickname));
+        }
         if !self.last_name.is_empty() {
             parts.push(self.last_name.clone());
         }
@@ -157,7 +161,7 @@ impl Contact {
         parts.join(" ")
     }
 
-    /// Name formatted for list rows, e.g. "Doe, John Edward".
+    /// Name formatted for list rows (using full name formatting for consistency).
     ///
     /// # Examples
     ///
@@ -170,25 +174,10 @@ impl Contact {
     ///     ..Default::default()
     /// };
     ///
-    /// assert_eq!(contact.display_name(), "Doe, John Edward");
+    /// assert_eq!(contact.display_name(), "John Edward Doe");
     /// ```
     pub fn display_name(&self) -> String {
-        let given: Vec<&str> = self
-            .first_names
-            .iter()
-            .filter(|n| !n.is_empty())
-            .map(|n| n.as_str())
-            .collect();
-
-        if !self.last_name.is_empty() {
-            if given.is_empty() {
-                self.last_name.clone()
-            } else {
-                format!("{}, {}", self.last_name, given.join(" "))
-            }
-        } else {
-            given.join(" ")
-        }
+        self.full_name()
     }
 }
 
@@ -203,6 +192,7 @@ mod tests {
             first_names: vec!["John".to_string(), "Edward".to_string()],
             last_name: "Doe".to_string(),
             title: "Dr.".to_string(),
+            nickname: "Jack".to_string(),
             preferred_name: "Johnny".to_string(),
             suffix: "Jr.".to_string(),
             maiden_name: "Smith".to_string(),
@@ -215,14 +205,17 @@ mod tests {
         let contact = sample_contact();
         assert_eq!(
             contact.full_name(),
-            "Dr. John Edward \"Johnny\" Doe Jr. (nee Smith)"
+            "Dr. John Edward \"Johnny\" 'Jack' Doe Jr. (nee Smith)"
         );
     }
 
     #[test]
-    fn display_name_is_last_comma_first() {
+    fn display_name_uses_full_name() {
         let contact = sample_contact();
-        assert_eq!(contact.display_name(), "Doe, John Edward");
+        assert_eq!(
+            contact.display_name(),
+            "Dr. John Edward \"Johnny\" 'Jack' Doe Jr. (nee Smith)"
+        );
     }
 
     #[test]

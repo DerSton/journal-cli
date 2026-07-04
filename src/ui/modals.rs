@@ -8,7 +8,7 @@ use crate::app::{App, AppMode, Tab};
 use chrono::Datelike;
 use ratatui::{
     Frame,
-    layout::Alignment,
+    layout::{Alignment, Constraint, Direction, Layout},
     text::{Line, Span},
     widgets::{Clear, List, ListItem, ListState, Paragraph},
 };
@@ -19,15 +19,52 @@ pub fn draw_overlays(f: &mut Frame, app: &App) {
         AppMode::DeleteConfirm => draw_delete_confirm(f, app),
         AppMode::ContactPicker {
             selected_contact_index,
+            ref search_query,
             ..
-        } => draw_contact_picker(f, app, selected_contact_index),
+        } => draw_contact_picker(f, app, selected_contact_index, search_query),
         AppMode::DatePicker {
             field_index,
             current_date,
             ..
         } => draw_date_picker(f, app, field_index, current_date),
+        AppMode::GroupMemberPicker {
+            selected_contact_index,
+            ref search_query,
+            ..
+        } => draw_group_member_picker(f, app, selected_contact_index, search_query),
+        AppMode::AttachmentPicker {
+            selected_attachment_index,
+        } => draw_attachment_picker(f, app, selected_attachment_index),
+        AppMode::DiscardConfirm { .. } => draw_discard_confirm(f, app),
         _ => {}
     }
+}
+
+// ── Discard confirmation ──────────────────────────────────────────────────────
+
+fn draw_discard_confirm(f: &mut Frame, _app: &App) {
+    let area = centered_rect(46, 28, f.area());
+    f.render_widget(Clear, area);
+
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled("Discard unsaved changes?", theme::text()))
+                .alignment(Alignment::Center),
+            Line::from(Span::styled("All edits will be lost.", theme::muted()))
+                .alignment(Alignment::Center),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  y  ", theme::danger()),
+                Span::styled("Discard", theme::muted()),
+                Span::styled("     n / Esc  ", theme::accent()),
+                Span::styled("Cancel  ", theme::muted()),
+            ])
+            .alignment(Alignment::Center),
+        ])
+        .block(theme::modal_danger("  Discard Changes")),
+        area,
+    );
 }
 
 // ── Delete confirmation ───────────────────────────────────────────────────────
@@ -39,6 +76,7 @@ fn draw_delete_confirm(f: &mut Frame, app: &App) {
     let item_label = match app.active_tab {
         Tab::Journal => "journal entry",
         Tab::Contacts => "contact",
+        Tab::Groups => "group",
         Tab::Settings | Tab::Stats => return,
     };
 
@@ -71,32 +109,118 @@ fn draw_delete_confirm(f: &mut Frame, app: &App) {
 
 // ── Contact picker ────────────────────────────────────────────────────────────
 
-fn draw_contact_picker(f: &mut Frame, app: &App, selected: usize) {
-    let area = centered_rect(56, 52, f.area());
+fn draw_contact_picker(f: &mut Frame, app: &App, selected: usize, search_query: &str) {
+    let area = centered_rect(60, 56, f.area());
     f.render_widget(Clear, area);
 
-    let items: Vec<ListItem> = app
-        .journal
-        .contacts
+    // Render outer block for the modal
+    let block = theme::modal("  Mention  ");
+    let inner_area = block.inner(area);
+    f.render_widget(block, area);
+
+    let [search_area, list_area] = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .areas(inner_area);
+
+    // Search query box
+    let display_query = format!(" {}", search_query);
+    f.render_widget(
+        Paragraph::new(Line::from(Span::styled(display_query, theme::text())))
+            .block(theme::field("Search", true)),
+        search_area,
+    );
+
+    // Filter items based on query
+    let filtered = app.get_picker_items(search_query);
+
+    let items: Vec<ListItem> = filtered
         .iter()
-        .map(|c| {
+        .map(|item| {
             ListItem::new(Line::from(Span::styled(
-                format!("  {}", c.full_name()),
+                format!("  {}", item.name),
                 theme::text(),
             )))
         })
         .collect();
 
     let mut state = ListState::default();
-    if !app.journal.contacts.is_empty() {
+    if !filtered.is_empty() {
         state.select(Some(selected));
     }
 
     f.render_stateful_widget(
         List::new(items)
-            .block(theme::modal("  Mention a person"))
+            .block(theme::panel("Select"))
             .highlight_style(theme::list_highlight()),
-        area,
+        list_area,
+        &mut state,
+    );
+}
+
+fn draw_group_member_picker(f: &mut Frame, app: &App, selected: usize, search_query: &str) {
+    let area = centered_rect(60, 56, f.area());
+    f.render_widget(Clear, area);
+
+    // Render outer block for the modal
+    let block = theme::modal("  Members  ");
+    let inner_area = block.inner(area);
+    f.render_widget(block, area);
+
+    let [search_area, list_area] = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .areas(inner_area);
+
+    // Search query box
+    let display_query = format!(" {}", search_query);
+    f.render_widget(
+        Paragraph::new(Line::from(Span::styled(display_query, theme::text())))
+            .block(theme::field("Search", true)),
+        search_area,
+    );
+
+    // Filter contacts based on query
+    let contacts = &app.journal.contacts;
+    let filtered: Vec<&crate::model::Contact> = if search_query.is_empty() {
+        contacts.iter().collect()
+    } else {
+        let q = search_query.to_lowercase();
+        contacts
+            .iter()
+            .filter(|c| {
+                c.full_name().to_lowercase().contains(&q) || c.nickname.to_lowercase().contains(&q)
+            })
+            .collect()
+    };
+
+    let items: Vec<ListItem> = filtered
+        .iter()
+        .map(|c| {
+            let is_checked = app.group_form.selected_member_ids.contains(&c.id);
+            let indicator = if is_checked { "[x] " } else { "[ ] " };
+            let style = if is_checked {
+                theme::accent()
+            } else {
+                theme::text()
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(indicator, style),
+                Span::styled(c.full_name(), style),
+            ]))
+        })
+        .collect();
+
+    let mut state = ListState::default();
+    if !filtered.is_empty() {
+        state.select(Some(selected));
+    }
+
+    f.render_stateful_widget(
+        List::new(items)
+            .block(theme::panel("People"))
+            .highlight_style(theme::list_highlight()),
+        list_area,
         &mut state,
     );
 }
@@ -207,4 +331,75 @@ fn days_in_month(year: i32, month: u32) -> u32 {
         2 => 28,
         _ => 30,
     }
+}
+
+// ── Attachment picker modal ───────────────────────────────────────────────────
+
+fn draw_attachment_picker(f: &mut Frame, app: &App, selected: usize) {
+    let area = centered_rect(68, 48, f.area());
+    f.render_widget(Clear, area);
+
+    let real_idx = match app.selected_entry_idx() {
+        Some(idx) => idx,
+        None => return,
+    };
+    let entry = &app.journal.entries[real_idx];
+
+    let items: Vec<ListItem> = if entry.attachments.is_empty() {
+        vec![
+            ListItem::new(Line::from("")),
+            ListItem::new(Line::from(Span::styled(
+                "    No attachments on this entry.",
+                theme::muted(),
+            ))),
+            ListItem::new(Line::from("")),
+            ListItem::new(Line::from(vec![
+                Span::styled("    Press ", theme::muted()),
+                Span::styled("a", theme::accent()),
+                Span::styled(" to attach a new file.", theme::muted()),
+            ])),
+        ]
+    } else {
+        entry
+            .attachments
+            .iter()
+            .enumerate()
+            .map(|(idx, att)| {
+                let size_str = if att.size_bytes >= 1024 * 1024 {
+                    format!("{:.1} MiB", att.size_bytes as f64 / (1024.0 * 1024.0))
+                } else if att.size_bytes >= 1024 {
+                    format!("{:.1} KiB", att.size_bytes as f64 / 1024.0)
+                } else {
+                    format!("{} B", att.size_bytes)
+                };
+
+                let prefix = if idx == selected { " ▶ " } else { "   " };
+                let style = if idx == selected {
+                    theme::accent()
+                } else {
+                    theme::text()
+                };
+
+                ListItem::new(Line::from(vec![
+                    Span::styled(prefix, theme::accent()),
+                    Span::styled(format!("{:<30} ", att.filename), style),
+                    Span::styled(format!("({:<12}) ", att.mime_type), theme::muted()),
+                    Span::styled(size_str, theme::muted()),
+                ]))
+            })
+            .collect()
+    };
+
+    let mut state = ListState::default();
+    if !entry.attachments.is_empty() {
+        state.select(Some(selected));
+    }
+
+    f.render_stateful_widget(
+        List::new(items)
+            .block(theme::modal("  Manage Attachments  "))
+            .highlight_style(theme::list_highlight()),
+        area,
+        &mut state,
+    );
 }

@@ -6,10 +6,12 @@
 mod contact_form;
 mod date_utils;
 mod entries;
+mod group_form;
 mod settings_actions;
 
 pub use contact_form::{ContactField, ContactForm};
 pub use date_utils::{format_localized_date, get_date_format_info, parse_localized_date};
+pub use group_form::{GroupField, GroupForm};
 
 use crate::crypto::SALT_SIZE;
 use crate::model::Journal;
@@ -22,10 +24,19 @@ pub enum Tab {
     Journal,
     /// Contacts directory view.
     Contacts,
+    /// Contact groups view.
+    Groups,
     /// Journal and word statistics view.
     Stats,
     /// Settings management view.
     Settings,
+}
+
+/// An item displayed inside the mention tag picker.
+#[derive(Debug, Clone)]
+pub struct PickerItem {
+    pub name: String,
+    pub tag: String,
 }
 
 /// Settings tab list rows, in display order.
@@ -37,7 +48,7 @@ pub const SETTINGS_GROUPS: &[&str] = &[
 ];
 
 /// The application's current input and focus state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppMode {
     /// Browsing a list (journal entries, contacts, or settings groups).
     List,
@@ -52,6 +63,8 @@ pub enum AppMode {
         is_edit: bool,
         /// The currently highlighted index in the contact picker modal.
         selected_contact_index: usize,
+        /// The current search query inside the contact picker.
+        search_query: String,
     },
     /// Calendar overlay for a date field.
     DatePicker {
@@ -61,6 +74,15 @@ pub enum AppMode {
         field_index: usize,
         /// Currently highlighted date in the calendar widget.
         current_date: chrono::NaiveDate,
+    },
+    /// Picker for selecting group members.
+    GroupMemberPicker {
+        /// Whether the parent context is an edit mode.
+        is_edit: bool,
+        /// The currently highlighted index in the member picker.
+        selected_contact_index: usize,
+        /// The current search query inside the member picker.
+        search_query: String,
     },
     /// Confirmation dialog before deleting an entry or contact.
     DeleteConfirm,
@@ -72,6 +94,16 @@ pub enum AppMode {
     RecoveryReset,
     /// Filtering entries or contacts using a search string.
     Search,
+    /// Picking or managing an attachment of the currently selected journal entry.
+    AttachmentPicker {
+        /// The currently highlighted index in the attachment list.
+        selected_attachment_index: usize,
+    },
+    /// Confirmation dialog before discarding unsaved changes.
+    DiscardConfirm {
+        /// Whether we were editing an existing item (true) or creating a new one (false).
+        is_edit: bool,
+    },
 }
 
 /// The global application state container.
@@ -99,6 +131,8 @@ pub struct App {
 
     /// Contact create/edit form state.
     pub contact_form: ContactForm,
+    /// Group create/edit form state.
+    pub group_form: GroupForm,
 
     /// Whether keys go to the settings right-hand panel (true) or the group list (false).
     pub settings_panel_focused: bool,
@@ -157,6 +191,7 @@ impl App {
             textarea: TextArea::default(),
             detail_scroll: 0,
             contact_form: ContactForm::empty(),
+            group_form: GroupForm::empty(),
             settings_panel_focused: false,
             settings_active_field: 0,
             settings_password_new: TextArea::default(),
@@ -178,6 +213,7 @@ impl App {
 
         app.sort_entries();
         app.sort_contacts();
+        app.sort_groups();
 
         app
     }
@@ -216,11 +252,11 @@ impl App {
         self.mode = AppMode::List;
     }
 
-    /// Returns the length of the list in the currently active tab.
     pub fn list_len(&self) -> usize {
         match self.active_tab {
             Tab::Journal => self.filtered_entries().len(),
             Tab::Contacts => self.filtered_contacts().len(),
+            Tab::Groups => self.filtered_groups().len(),
             Tab::Settings => SETTINGS_GROUPS.len(),
             Tab::Stats => 0,
         }
@@ -258,6 +294,40 @@ impl App {
         }
     }
 
+    /// Returns picker items combining groups and contacts filtered by search query.
+    pub fn get_picker_items(&self, query: &str) -> Vec<PickerItem> {
+        let mut items = Vec::new();
+        let q = query.to_lowercase();
+
+        // Add groups first
+        for g in &self.journal.groups {
+            if q.is_empty()
+                || g.name.to_lowercase().contains(&q)
+                || g.description.to_lowercase().contains(&q)
+            {
+                items.push(PickerItem {
+                    name: g.name.clone(),
+                    tag: g.mention_tag(),
+                });
+            }
+        }
+
+        // Add contacts
+        for c in &self.journal.contacts {
+            if q.is_empty()
+                || c.full_name().to_lowercase().contains(&q)
+                || c.nickname.to_lowercase().contains(&q)
+            {
+                items.push(PickerItem {
+                    name: c.full_name(),
+                    tag: c.mention_tag(),
+                });
+            }
+        }
+
+        items
+    }
+
     /// Maps the currently selected filtered entry index back to its index in the master `journal.entries` list.
     pub fn selected_entry_idx(&self) -> Option<usize> {
         let filtered = self.filtered_entries();
@@ -283,6 +353,32 @@ impl App {
                 .contacts
                 .iter()
                 .position(|c| c.id == selected.id)
+        }
+    }
+
+    /// Checks if the editor in the current active tab has any unsaved modifications.
+    pub fn is_dirty(&self) -> bool {
+        match self.mode {
+            AppMode::Writing { is_edit } => match self.active_tab {
+                Tab::Journal => {
+                    if is_edit {
+                        if let Some(real_idx) = self.selected_entry_idx() {
+                            let entry = &self.journal.entries[real_idx];
+                            entry.content != self.textarea.lines().join("\n")
+                                || entry.date_for != self.entry_date_for
+                        } else {
+                            true
+                        }
+                    } else {
+                        !self.textarea.lines().join("\n").trim().is_empty()
+                            || self.entry_date_for.is_some()
+                    }
+                }
+                Tab::Contacts => self.is_contact_form_dirty(is_edit),
+                Tab::Groups => self.is_group_form_dirty(is_edit),
+                _ => false,
+            },
+            _ => false,
         }
     }
 
@@ -430,5 +526,51 @@ mod tests {
         assert_eq!(app.journal.entries[0].id, "1");
         assert_eq!(app.journal.entries[1].id, "3");
         assert_eq!(app.journal.entries[2].id, "2");
+    }
+
+    #[test]
+    fn test_group_filtering_sorting_and_picker() {
+        let mut app = test_app();
+        app.journal.groups = vec![
+            crate::model::Group {
+                id: "group-2".to_string(),
+                name: "Ski trip".to_string(),
+                description: "Snowboarding".to_string(),
+                member_ids: vec!["1".to_string()],
+                start_date: None,
+                end_date: None,
+            },
+            crate::model::Group {
+                id: "group-1".to_string(),
+                name: "Family".to_string(),
+                description: "Relative".to_string(),
+                member_ids: vec![],
+                start_date: None,
+                end_date: None,
+            },
+        ];
+
+        app.journal.contacts = vec![Contact {
+            id: "1".to_string(),
+            first_names: vec!["Alice".to_string()],
+            last_name: "Smith".to_string(),
+            ..Default::default()
+        }];
+
+        // Groups sorting in App: Family (group-1) first, Ski trip (group-2) second.
+        app.sort_groups();
+        assert_eq!(app.journal.groups[0].id, "group-1");
+        assert_eq!(app.journal.groups[1].id, "group-2");
+
+        // Filtering groups
+        app.search_query = "snow".to_string();
+        let filtered = app.filtered_groups();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, "group-2");
+
+        // Picker items combining contacts and groups
+        let picker_items = app.get_picker_items("family");
+        assert_eq!(picker_items.len(), 1);
+        assert_eq!(picker_items[0].tag, "{{group|group-1}}");
     }
 }
