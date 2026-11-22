@@ -17,17 +17,10 @@ ARCH="$(uname -m)"
 
 if [ "$OS" = "Linux" ] && [ "$ARCH" = "x86_64" ]; then
     ASSET_NAME="journal-cli-linux-x86_64"
-elif [ "$OS" = "Darwin" ]; then
-    if [ "$ARCH" = "x86_64" ]; then
-        ASSET_NAME="journal-cli-macos-x86_64"
-    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
-        ASSET_NAME="journal-cli-macos-arm64"
-    else
-        echo "Error: Unsupported macOS architecture: $ARCH"
-        exit 1
-    fi
+elif [ "$OS" = "Darwin" ] && { [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; }; then
+    ASSET_NAME="journal-cli-macos-arm64"
 else
-    echo "Error: Prebuilt binaries are only provided for Linux (x86_64) and macOS (x86_64/arm64)."
+    echo "Error: Prebuilt binaries are only provided for Linux (x86_64) and macOS (Apple Silicon / arm64)."
     echo "If you are on another operating system or architecture, please install via Cargo:"
     echo "  cargo install --git https://github.com/DerSton/journal-cli"
     exit 1

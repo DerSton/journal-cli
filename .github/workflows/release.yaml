@@ -4,14 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  pull_request:
-    branches: ["main"]
-    paths:
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "src/**"
-      - "build.rs"
-      - ".github/workflows/release.yaml"
   workflow_dispatch:
 
 permissions:
@@ -33,11 +25,7 @@ jobs:
             target: x86_64-pc-windows-msvc
             artifact_name: journal-cli.exe
             asset_name: journal-cli-windows-x86_64.exe
-          - os: macos-14
-            target: x86_64-apple-darwin
-            artifact_name: journal-cli
-            asset_name: journal-cli-macos-x86_64
-          - os: macos-14
+          - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: journal-cli
             asset_name: journal-cli-macos-arm64
